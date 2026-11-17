@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Samsung Galaxy感謝祭｜司会画面</title>
 <style>
@@ -144,6 +145,27 @@
   .soundRow .label { min-width: 210px; color: var(--cyan); font-weight: bold; font-size: 15px; }
   .soundRow .sname { color: var(--muted); font-size: 13px; }
   .note { color: var(--muted); font-size: 13px; }
+  /* 参加者モニター・接続チェック */
+  .monitor { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 14px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: #0b1a4d; white-space: nowrap; cursor: default; }
+  .chip.st-warn { border-color: #ffd94d; }
+  .chip.st-off { border-color: #ff5f7a; background: #4a1020; }
+  .chip.ans { background: #0f5a8a; border-color: var(--cyan); }
+  .chip.pred { background: #3a1f6e; border-color: #b48cff; }
+  .chip.noans { background: #5a1a2a; border-color: #ff5f7a; }
+  .chip.out { opacity: .45; }
+  .monHead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 15px; color: var(--muted); }
+  .monHead b { color: #fff; }
+  #pingCard { border-color: #3ecf7f; }
+  .pingSum { text-align: center; font-size: 30px; margin: 6px 0; }
+  .pingSum b { font-size: 54px; color: #8ef0c1; }
+  .pingNg { text-align: center; font-size: 20px; color: #ffb3c0; }
+  .monitor.proxyOn .chip { cursor: pointer; }
+  .monitor.proxyOn .chip:hover { outline: 2px solid #fff; }
+  #proxyPanel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 95; width: min(560px, 92vw); background: #06123a; border: 2px solid var(--cyan); border-radius: 18px; padding: 20px; box-shadow: 0 0 60px rgba(0,0,0,.8); }
+  #proxyPanel h3 { text-align: center; font-size: 22px; margin-bottom: 12px; }
+  #proxyPanel .pbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #proxyPanel .pbtns button { border-radius: 12px; font-size: 26px; padding: 18px; box-shadow: none; border: 2px solid rgba(255,255,255,.7); }
 </style>
 </head>
 <body>
@@ -151,6 +173,14 @@
 <div id="stampLayer"></div>
 <div id="confettiLayer"></div>
 <div id="ticker" class="hidden"></div>
+<div id="proxyPanel" class="hidden">
+  <h3 id="proxyTitle"></h3>
+  <div class="pbtns">
+    <button class="c0" data-proxy="0">A</button><button class="c1" data-proxy="1">B</button>
+    <button class="c2" data-proxy="2">C</button><button class="c3" data-proxy="3">D</button>
+  </div>
+  <div class="row" style="justify-content:center;margin-top:12px"><button class="sub2" id="proxyCancel">やめる</button></div>
+</div>
 <div id="soundDock"><button class="sub2" id="entranceBtn">▶ 入場BGM</button><button class="sub2" id="soundStopBtn">🔇 音を止める</button></div>
 <div class="wrap">
   <h1 class="logo"><span class="brand">Samsung Galaxy</span>感謝祭</h1>
@@ -192,6 +222,15 @@
     <div class="row"><button id="createRoom">部屋を作って参加者を待つ</button></div>
   </div>
 
+  <!-- 接続チェック -->
+  <div class="card hidden" id="pingCard">
+    <h2 style="text-align:center">📶 接続チェック中</h2>
+    <p style="text-align:center;color:var(--muted)">参加者のスマホに「ここをタップ！」が出ています</p>
+    <div class="pingSum" id="pingSum"></div>
+    <div class="pingNg" id="pingNg"></div>
+    <div class="row" style="justify-content:center;margin-top:12px"><button class="sub2" id="pingAgainBtn">もう一度チェックする</button><button id="pingEndBtn">チェックを終える</button></div>
+  </div>
+
   <!-- ロビー -->
   <div class="card glow hidden" id="lobbyCard">
     <p style="text-align:center;font-size:20px">参加者はスマホで play.html を開き、この番号と自分のチームを選んで参加</p>
@@ -200,8 +239,10 @@
     <p style="text-align:center;color:var(--muted);font-size:14px">名前をクリックしたとき：
       <select id="lobbyClick"><option value="rep">決勝用の「代表（★）」を付け外し</option><option value="remove">参加者を外す（二重登録など）</option></select>
       　点線の名前＝通信が切れている人</p>
+    <p class="note" style="text-align:center">🟢 接続中　🟡 反応が遅い（画面が消えているかも）　🔴 通信が切れている</p>
     <div id="lobbyTeams"></div>
     <div class="row" style="justify-content:center;margin-top:18px">
+      <button class="sub2 pingStart">📶 接続チェックをする</button>
       <button id="startGame">クイズ開始！</button>
     </div>
   </div>
@@ -231,6 +272,7 @@
       </div>
       <div class="row" style="justify-content:center">
         <button class="sub2 hidden" id="periodBtn">このピリオドを終える（ピリオド優勝の発表 → 全員復活）</button>
+        <button class="sub2 pingStart">📶 接続チェック</button>
       </div>
     </div>
 
@@ -262,6 +304,12 @@
       <button id="revealBtn" class="hidden">正解発表！</button>
       <button id="nextBtn" class="hidden">次の問題へ</button>
       <button id="finishBtn" class="hidden">結果発表へ</button>
+    </div>
+
+    <div style="margin-top:16px;border-top:1px solid #1c2f6e;padding-top:10px">
+      <div class="monHead"><span>👥 参加者モニター <span id="proxyHint" class="note"></span></span><span id="monSum"></span></div>
+      <div class="monitor" id="monitor"></div>
+      <div class="pingNg" id="noAnsView" style="font-size:17px;margin-top:6px"></div>
     </div>
 
     <h2 style="margin-top:14px">チーム順位</h2>
@@ -534,7 +582,8 @@ $("createRoom").onclick = async () => {
   $("lobbyCard").classList.remove("hidden");
   roomRef().child("players").on("value", snap => {
     playersCache = snap.val() || {};
-    renderLobby(); renderStandings(); renderSurv();
+    renderLobby(); renderStandings(); renderSurv(); renderMonitor();
+    if (pingNonce) renderPing();
   });
   roomRef().child("teamState").on("value", snap => { teamState = snap.val() || {}; renderStandings(); });
   roomRef().child("stamps").on("child_added", snap => {
@@ -558,7 +607,7 @@ function renderLobby() {
     const d = document.createElement("div");
     d.className = "teamblock";
     d.innerHTML = `<h3>${esc(t)}（${members.length}人）</h3><div class="names">${members.map(([pid,p]) =>
-      `<span data-pid="${pid}" class="${p.alive === false ? "out" : ""} ${p.rep ? "rep" : ""} ${p.online === false ? "off" : ""}">${p.rep ? "★" : ""}${esc(p.name)}</span>`).join("") || "（まだいません）"}</div>`;
+      `<span data-pid="${pid}" class="${p.alive === false ? "out" : ""} ${p.rep ? "rep" : ""} ${connStatus(p) === "off" ? "off" : ""}">${connIcon(p)}${pingMark(pid)} ${p.rep ? "★" : ""}${esc(p.name)}</span>`).join("") || "（まだいません）"}</div>`;
     box.appendChild(d);
   });
   box.querySelectorAll("[data-pid]").forEach(sp => sp.onclick = async () => {
@@ -571,6 +620,115 @@ function renderLobby() {
     await roomRef().child("players/" + pid + "/rep").set(!cur);
   });
 }
+
+// ===== 接続の見える化 =====
+// スマホは10秒ごとに合図（hb）を送る。30秒以上届かなければ「反応が遅い」
+function connStatus(p) {
+  if (!p || p.online === false) return "off";
+  if (typeof p.hb === "number" && now() - p.hb > 30000) return "warn";
+  return "ok";
+}
+const connIcon = p => ({ ok: "🟢", warn: "🟡", off: "🔴" }[connStatus(p)]);
+let pingNonce = "", pingResp = {}, pingRef = null, pingFn = null;
+const pingMark = pid => pingNonce ? (pingResp[pid] ? "✅" : "…") : "";
+let curAnsSet = {}, curPredSet = {}, answerClosed = false;
+
+function renderMonitor() {
+  const box = $("monitor");
+  if (!box) return;
+  const arr = Object.entries(playersCache).sort((a, b) => String(a[1].team).localeCompare(String(b[1].team)) || String(a[1].name).localeCompare(String(b[1].name), "ja"));
+  const cnt = { ok: 0, warn: 0, off: 0 };
+  let need = 0, got = 0;
+  const noAns = [];
+  box.innerHTML = arr.map(([pid, p]) => {
+    const st = connStatus(p);
+    cnt[st]++;
+    const elig = eligible(p);
+    const cls = ["chip", "st-" + st];
+    let mark = "";
+    if (pingNonce) { mark = pingResp[pid] ? " ✅" : " …"; }
+    else if (qi >= 0) {
+      if (elig) need++;
+      if (curAnsSet[pid]) { cls.push("ans"); mark = " ✓"; if (elig) got++; }
+      else if (curPredSet[pid]) { cls.push("pred"); mark = " 🔮"; }
+      else if (answerClosed && elig) { cls.push("noans"); mark = " ✕"; noAns.push(p.name); }
+    }
+    if (p.alive === false) cls.push("out");
+    const man = (curAnsSet[pid] && curAnsSet[pid].manual) || (curPredSet[pid] && curPredSet[pid].manual) ? "(代)" : "";
+    return `<span class="${cls.join(" ")}" data-mpid="${pid}">${connIcon(p)} ${esc(p.name)}${mark}${man}</span>`;
+  }).join("");
+  const canProxy = proxyAllowed();
+  box.classList.toggle("proxyOn", canProxy);
+  $("proxyHint").textContent = canProxy ? "（スマホが使えない人は、名前をタップすると代わりに回答を入れられます）" : "";
+  if (canProxy) box.querySelectorAll("[data-mpid]").forEach(c => c.onclick = () => openProxy(c.dataset.mpid));
+  $("monSum").innerHTML = `🟢 <b>${cnt.ok}</b>　🟡 <b>${cnt.warn}</b>　🔴 <b>${cnt.off}</b>` + (qi >= 0 && !pingNonce ? `　｜　回答 <b>${got}</b> ／ ${need}人` : "");
+  $("noAnsView").textContent = answerClosed && noAns.length ? `未回答（または届いていない）：${noAns.join("、")}` : "";
+}
+// ===== 代理回答（スマホが使えない人の答えを司会が入れる） =====
+let answerStarted = false, revealed = false, proxyPid = "";
+function proxyAllowed() { return qi >= 0 && answerStarted && !revealed && !pingNonce; }
+function openProxy(pid) {
+  const p = playersCache[pid];
+  if (!p || !proxyAllowed()) return;
+  proxyPid = pid;
+  const kind = eligible(p) ? "回答" : "予想";
+  $("proxyTitle").textContent = `${p.name} さんの${kind}を代わりに入れる（色カードの色を選ぶ）`;
+  $("proxyPanel").classList.remove("hidden");
+}
+document.querySelectorAll("[data-proxy]").forEach(b => b.onclick = async () => {
+  const p = playersCache[proxyPid];
+  $("proxyPanel").classList.add("hidden");
+  if (!p || !proxyAllowed()) return;
+  const path = eligible(p) ? "answers" : "predictions";
+  // 時刻は締切ちょうどにする（締切後でも有効・早答えランキングには入れない）
+  await roomRef().child(`${path}/${qi}/${proxyPid}`).set({ choice: +b.dataset.proxy, t: curEndsAt, manual: true });
+  // 締切後は自動の数え直しが止まっているので、ここで反映する
+  const snap = await roomRef().child(`${path}/${qi}`).once("value");
+  if (path === "answers") curAnsSet = snap.val() || {}; else curPredSet = snap.val() || {};
+  renderMonitor();
+});
+$("proxyCancel").onclick = () => $("proxyPanel").classList.add("hidden");
+
+setInterval(() => {
+  if (!pin) return;
+  if (!$("lobbyCard").classList.contains("hidden")) renderLobby();
+  renderMonitor(); renderSurv();
+}, 5000);
+
+// ===== 接続チェック =====
+async function startPing() {
+  if (!pin) return;
+  if (pingRef && pingFn) pingRef.off("value", pingFn);
+  pingNonce = Date.now().toString(36);
+  pingResp = {};
+  await roomRef().child("meta").set({ state: "ping", qi, period, nonce: pingNonce });
+  pingRef = roomRef().child("pings/" + pingNonce);
+  pingFn = s => { pingResp = s.val() || {}; renderPing(); };
+  pingRef.on("value", pingFn);
+  $("pingCard").classList.remove("hidden");
+  renderPing();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function renderPing() {
+  const arr = Object.entries(playersCache);
+  const ok = arr.filter(([pid]) => pingResp[pid]).length;
+  const ng = arr.filter(([pid]) => !pingResp[pid]).map(([, p]) => `${connIcon(p)} ${esc(p.name)}`);
+  $("pingSum").innerHTML = `応答 <b>${ok}</b> ／ ${arr.length}人`;
+  $("pingNg").innerHTML = ng.length ? `まだ応答がない人：${ng.join("、")}` : "🎉 全員つながっています！";
+  if (!$("lobbyCard").classList.contains("hidden")) renderLobby();
+  renderMonitor();
+}
+async function endPing() {
+  if (pingRef && pingFn) pingRef.off("value", pingFn);
+  pingRef = null; pingFn = null; pingNonce = ""; pingResp = {};
+  await roomRef().child("meta").set({ state: "lobby", qi, period });
+  $("pingCard").classList.add("hidden");
+  if (!$("lobbyCard").classList.contains("hidden")) renderLobby();
+  renderMonitor();
+}
+document.querySelectorAll(".pingStart").forEach(b => b.onclick = startPing);
+$("pingAgainBtn").onclick = startPing;
+$("pingEndBtn").onclick = endPing;
 
 function teamSurvivors(tid) { return Object.values(playersCache).filter(p => p.team === tid && p.alive !== false).length; }
 function teamMembers(tid) { return Object.values(playersCache).filter(p => p.team === tid).length; }
@@ -612,9 +770,10 @@ function animateNum(el, to) {
 function renderSurv() {
   const list = Object.values(playersCache);
   const alive = list.filter(p => p.alive !== false).length;
-  const off = list.filter(p => p.online === false).length;
+  const off = list.filter(p => connStatus(p) === "off").length;
+  const warn = list.filter(p => connStatus(p) === "warn").length;
   $("survTotal").textContent = list.length;
-  $("offView").textContent = off ? `📵 通信が切れている人 ${off}人` : "";
+  $("offView").textContent = (off ? `🔴 通信が切れている人 ${off}人　` : "") + (warn ? `🟡 反応が遅い人 ${warn}人` : "");
   $("periodLabel").textContent = `ピリオド ${period}`;
   animateNum($("survNum"), alive);
 }
@@ -633,6 +792,7 @@ function showTicker(text) {
 
 $("startGame").onclick = () => {
   if (Object.keys(playersCache).length === 0) { alert("参加者がまだいません"); return; }
+  if (pingNonce) endPing();
   stopSound("entrance"); entranceOn = false; $("entranceBtn").textContent = "▶ 入場BGM";
   $("lobbyCard").classList.add("hidden");
   $("stageCard").classList.remove("hidden");
@@ -669,8 +829,11 @@ function renderChoices(q) {
 
 $("askBtn").onclick = async () => {
   if (qi + 1 >= questions.length) return;
+  if (pingNonce) { if (pingRef && pingFn) pingRef.off("value", pingFn); pingRef = null; pingFn = null; pingNonce = ""; pingResp = {}; $("pingCard").classList.add("hidden"); }
   qi++;
   curMode = $("modeSel").value;
+  curAnsSet = {}; curPredSet = {}; answerClosed = false; answerStarted = false; revealed = false;
+  renderMonitor();
   const q = questions[qi];
   $("prepArea").classList.add("hidden");
   $("revealArea").classList.add("hidden");
@@ -722,11 +885,13 @@ async function beginAnswer() {
   $("revealBtn").classList.add("hidden");
   playSound("think");
   await roomRef().child("meta").set({ state: "question", qi, startAt: curQStart, endsAt: curEndsAt, mode: curMode, period });
+  answerStarted = true;
+  renderMonitor();
   let nAns = 0, nPred = 0;
   const showCount = () => { $("ansCount").textContent = `回答済み ${nAns} 人` + (nPred ? ` ／ 予想投票 ${nPred} 人` : ""); };
   const ansRef = roomRef().child("answers/" + qi), predRef = roomRef().child("predictions/" + qi);
-  const aL = ansRef.on("value", s => { nAns = s.numChildren(); showCount(); });
-  const pL = predRef.on("value", s => { nPred = s.numChildren(); showCount(); });
+  const aL = ansRef.on("value", s => { nAns = s.numChildren(); curAnsSet = s.val() || {}; showCount(); renderMonitor(); });
+  const pL = predRef.on("value", s => { nPred = s.numChildren(); curPredSet = s.val() || {}; showCount(); renderMonitor(); });
   liveOff = [() => ansRef.off("value", aL), () => predRef.off("value", pL)];
   clearInterval(timerInt);
   let lastSec = null;
@@ -743,8 +908,8 @@ async function beginAnswer() {
       clearInterval(timerInt);
       stopSound("think");
       beep(440, 0.35);
-      // 遅れて届く回答のために少し待ってから数え終える
-      setTimeout(() => { liveOff.forEach(f => f()); liveOff = []; }, GRACE_MS);
+      // 遅れて届く回答のために少し待ってから数え終え、未回答の人を表示する
+      setTimeout(() => { liveOff.forEach(f => f()); liveOff = []; answerClosed = true; renderMonitor(); }, GRACE_MS);
       $("revealBtn").classList.remove("hidden");
     }
   }, 100);
@@ -769,6 +934,9 @@ function renderDist(counts, total, correct) {
 
 $("revealBtn").onclick = async () => {
   $("revealBtn").classList.add("hidden");
+  $("proxyPanel").classList.add("hidden");
+  revealed = true;
+  renderMonitor();
   stopSound("think"); stopSound("consult");
   liveOff.forEach(f => f()); liveOff = [];
   const q = questions[qi];
@@ -813,8 +981,8 @@ $("revealBtn").onclick = async () => {
     const ok = !!(a && a.choice === q.correct);
     if (ok) {
       correctN++;
-      const sec = typeof a.t === "number" ? Math.max(0, (a.t - curQStart) / 1000) : curSecs;
-      speed.push({ pid, name: p.name, team: p.team, sec });
+      const sec = typeof a.t === "number" && !a.manual ? Math.max(0, (a.t - curQStart) / 1000) : curSecs;
+      if (!a.manual) speed.push({ pid, name: p.name, team: p.team, sec });
       updates[`players/${pid}/score`] = (p.score || 0) + 1;
       updates[`players/${pid}/pScore`] = (p.pScore || 0) + 1;
       updates[`players/${pid}/pTime`] = +((p.pTime || 0) + sec).toFixed(2);

@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Samsung Galaxy感謝祭｜回答画面</title>
 <style>
@@ -69,6 +70,14 @@
   .abtn.wait { filter: grayscale(.55) brightness(.8); }
   .abtn.wait::after { animation: none; }
   #toast { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); background: rgba(255,95,122,.95); color: #fff; font-size: 22px; font-weight: bold; padding: 16px 24px; border-radius: 14px; z-index: 80; text-align: center; pointer-events: none; white-space: pre-line; }
+  #connDot { position: fixed; top: 10px; right: 12px; z-index: 90; font-size: 13px; padding: 4px 10px; border-radius: 999px; background: rgba(2,10,36,.9); border: 1px solid var(--line); }
+  #connDot.bad { background: #8a1a2e; border-color: #ff5f7a; color: #fff; font-size: 15px; font-weight: bold; animation: pulseP .6s infinite alternate; }
+  .pingBtn { width: 100%; min-height: 180px; font-family: inherit; font-size: 30px; font-weight: bold; color: #fff; border: 3px solid #fff; border-radius: 20px; cursor: pointer;
+    background: linear-gradient(180deg, #3ecf7f, #0d8a4d); box-shadow: 0 0 30px rgba(62,207,127,.6); }
+  .pingBtn:disabled { background: #1c2f6e; box-shadow: none; font-size: 24px; }
+  .sendState { font-size: 17px; margin-top: 6px; }
+  .sendState.ok { color: #8ef0c1; }
+  .sendState.slow { color: #ffb3c0; font-weight: bold; }
   .link { background: none; border: none; color: var(--muted); text-decoration: underline; font-size: 14px; margin-top: 10px; width: 100%; cursor: pointer; font-family: inherit; }
 </style>
 </head>
@@ -115,6 +124,14 @@
     <p class="msg" id="qTextP" style="margin-bottom:12px"></p>
     <div class="grid" id="btnGrid"></div>
     <p class="msg" id="pickedMsg" style="margin-top:12px"></p>
+    <p class="msg sendState" id="sendState"></p>
+  </div>
+
+  <!-- 接続チェック -->
+  <div class="card hidden" id="pingCard">
+    <p class="msg big" style="margin-bottom:12px">📶 接続チェック</p>
+    <button class="pingBtn" id="pingBtn">ここをタップ！</button>
+    <p class="msg" id="pingMsg" style="margin-top:12px">司会の画面にあなたの名前が出るか確認します</p>
   </div>
 
   <!-- 結果 -->
@@ -125,6 +142,7 @@
   </div>
 
   <div id="toast" class="hidden"></div>
+  <div id="connDot" class="hidden"></div>
   <p class="teampoints" id="audView"></p>
   <div class="spacer"></div>
   <div id="stampBar" class="hidden">
@@ -232,8 +250,22 @@ function enterRoom() {
 }
 
 function show(id) {
-  ["waitCard","consultCard","ansCard","resultCard"].forEach(x => $(x).classList.toggle("hidden", x !== id));
+  ["waitCard","consultCard","ansCard","resultCard","pingCard"].forEach(x => $(x).classList.toggle("hidden", x !== id));
 }
+
+// ===== 接続の見える化 =====
+let connected = false, hbInt = null;
+function renderConn() {
+  const d = $("connDot");
+  d.classList.remove("hidden");
+  d.classList.toggle("bad", !connected);
+  d.textContent = connected ? "🟢 接続中" : "🔴 接続が切れています。電波・Wi-Fiを確認してね";
+}
+function heartbeat() {
+  if (!myExists || !connected) return;
+  db.ref(`rooms/${pin}/players/${myId}`).update({ online: true, hb: firebase.database.ServerValue.TIMESTAMP });
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") heartbeat(); });
 function startTimer(endsAt, elId, danger, onEnd) {
   clearInterval(timerInt);
   const el = $(elId);
@@ -258,6 +290,8 @@ function toast(msg) {
 function renderButtons(q, kind, state, chosen) {
   const grid = $("btnGrid");
   grid.innerHTML = "";
+  $("sendState").className = "msg sendState" + (chosen >= 0 ? " ok" : "");
+  $("sendState").textContent = chosen >= 0 ? "✅ 司会の画面に届きました" : "";
   q.choices.forEach((c, j) => {
     const b = document.createElement("button");
     b.className = `abtn ${COLORS[j]} ${kind === "pred" ? "pred" : ""} ${state === "wait" ? "wait" : ""}`;
@@ -284,13 +318,20 @@ function setRoleView(isPred) {
 function watch() {
   const room = db.ref("rooms/" + pin);
   // 通信が切れたら「オフライン」にするだけで、名簿からは消さない
-  db.ref(".info/connected").on("value", s => {
-    if (s.val() !== true || !myExists) return;
-    const r = room.child("players/" + myId);
-    r.child("online").onDisconnect().set(false);
-    r.child("online").set(true);
+  const offs = [];
+  const listen = (ref, fn) => { ref.on("value", fn); offs.push(() => ref.off("value", fn)); };
+  listen(db.ref(".info/connected"), s => {
+    connected = s.val() === true;
+    renderConn();
+    if (!connected || !myExists) return;
+    room.child("players/" + myId + "/online").onDisconnect().set(false);
+    heartbeat();
   });
-  room.child("players/" + myId).on("value", s => {
+  // 問題文を常に受け取っておく（出題の瞬間にすぐ表示できるように）
+  listen(room.child("question"), () => {});
+  clearInterval(hbInt);
+  hbInt = setInterval(heartbeat, 10000);
+  listen(room.child("players/" + myId), s => {
     const p = s.val();
     if (!p) {
       if (myExists) {
@@ -298,8 +339,10 @@ function watch() {
         room.child("players/" + myId + "/online").onDisconnect().cancel();
         myExists = false;
         localStorage.removeItem(SESSION_KEY);
-        room.off(); db.ref(".info/connected").off();
+        offs.forEach(f => f());
+        clearInterval(hbInt);
         clearInterval(timerInt);
+        $("connDot").classList.add("hidden");
         show("");
         $("stampBar").classList.add("hidden");
         $("joinCard").classList.remove("hidden");
@@ -312,20 +355,20 @@ function watch() {
     myExists = true;
     if (first) {
       room.child("players/" + myId + "/online").onDisconnect().set(false);
-      room.child("players/" + myId + "/online").set(true);
+      heartbeat();
     }
     myAlive = p.alive !== false; myRep = !!p.rep; myAud = p.audPts || 0;
     $("audView").textContent = myAud > 0 ? `🔮 観客ポイント：${myAud}` : "";
   });
-  room.child("teamState/" + myTeam + "/points").on("value", s => {
+  listen(room.child("teamState/" + myTeam + "/points"), s => {
     const txt = "チームの点数：" + (s.val() || 0) + "点";
     $("waitPoints").textContent = txt;
     $("resultPoints").textContent = txt;
   });
-  room.child("meta").on("value", async snap => {
+  listen(room.child("meta"), async snap => {
     const meta = snap.val();
     if (!meta) return;
-    const key = [meta.state, meta.qi, meta.period].join(":");
+    const key = [meta.state, meta.qi, meta.period, meta.nonce || ""].join(":");
     if (key === shownKey) return;
     shownKey = key;
     // 読み込み待ちの間に次の状態が来たら、古い方の表示は捨てる（順番の入れ替わり対策）
@@ -336,6 +379,17 @@ function watch() {
       currentQi = meta.qi; picked = -1; predicted = -1;
     }
     if (meta.state === "lobby") { show("waitCard"); return; }
+
+    if (meta.state === "ping") {
+      clearInterval(timerInt);
+      pingNonce = meta.nonce;
+      $("pingBtn").disabled = false;
+      $("pingBtn").textContent = "ここをタップ！";
+      $("pingMsg").textContent = "司会の画面にあなたの名前が出るか確認します";
+      show("pingCard");
+      if (navigator.vibrate) navigator.vibrate(120);
+      return;
+    }
 
     if (meta.state === "consult") {
       const q = (await room.child("question").once("value")).val();
@@ -441,13 +495,50 @@ function watch() {
   });
 }
 
+// 送った答えがサーバーに届いたかを本人に見せる
 async function send(path, j) {
   $("btnGrid").querySelectorAll(".abtn").forEach((b, k) => {
     b.disabled = true;
     b.classList.add(k === j ? "picked" : "dim");
   });
-  await db.ref(`rooms/${pin}/${path}/${currentQi}/${myId}`).set({ choice: j, t: firebase.database.ServerValue.TIMESTAMP });
+  const st = $("sendState");
+  st.className = "msg sendState";
+  st.textContent = "送信中…";
+  let done = false;
+  const slowT = setTimeout(() => {
+    if (done) return;
+    st.className = "msg sendState slow";
+    st.textContent = "⚠️ まだ届いていません。電波・Wi-Fiを確認してね（つながると自動で送られます）";
+  }, 3000);
+  try {
+    await db.ref(`rooms/${pin}/${path}/${currentQi}/${myId}`).set({ choice: j, t: firebase.database.ServerValue.TIMESTAMP });
+    done = true; clearTimeout(slowT);
+    st.className = "msg sendState ok";
+    st.textContent = "✅ 司会の画面に届きました";
+  } catch (e) {
+    done = true; clearTimeout(slowT);
+    st.className = "msg sendState slow";
+    st.textContent = "⚠️ 送れませんでした。近くのスタッフに知らせてね";
+  }
 }
+let pingNonce = "";
+$("pingBtn").onclick = async () => {
+  if (!pingNonce || $("pingBtn").disabled) return;
+  $("pingBtn").disabled = true;
+  $("pingBtn").textContent = "送信中…";
+  const slowT = setTimeout(() => { $("pingMsg").textContent = "⚠️ 届くのに時間がかかっています。電波・Wi-Fiを確認してね"; }, 3000);
+  try {
+    await db.ref(`rooms/${pin}/pings/${pingNonce}/${myId}`).set(firebase.database.ServerValue.TIMESTAMP);
+    clearTimeout(slowT);
+    $("pingBtn").textContent = "✅ 接続OK！";
+    $("pingMsg").textContent = "司会の画面に届きました。このまま待っててね";
+  } catch (e) {
+    clearTimeout(slowT);
+    $("pingBtn").disabled = false;
+    $("pingBtn").textContent = "もう一度タップ";
+    $("pingMsg").textContent = "⚠️ 送れませんでした。近くのスタッフに知らせてね";
+  }
+};
 async function pick(j) {
   if (picked >= 0 || now() > curEndsAt) return;
   picked = j;
