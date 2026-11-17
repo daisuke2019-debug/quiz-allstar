@@ -3,79 +3,71 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>クイズ・オールスター｜回答画面</title>
+<title>Samsung Galaxy感謝祭｜回答画面</title>
 <style>
+  :root { --cyan: #4fd2ff; --ice: #d6ecff; --muted: #9fb6e6; --line: #2a4a9e; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; color: #fff; min-height: 100vh; padding: 16px;
+  html { background: #020a24; }
+  body { font-family: "Meiryo UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; color: #fff; min-height: 100vh; padding: 16px;
     background:
       radial-gradient(2px 2px at 15% 20%, #fff 50%, transparent 51%),
-      radial-gradient(1.5px 1.5px at 70% 12%, #ffe9a8 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 70% 12%, #bfe6ff 50%, transparent 51%),
       radial-gradient(2px 2px at 85% 65%, #fff 50%, transparent 51%),
       radial-gradient(1.5px 1.5px at 30% 80%, #fff 50%, transparent 51%),
-      radial-gradient(ellipse 90% 55% at 50% -10%, #2a1e6e 0%, transparent 60%),
-      linear-gradient(180deg, #070722 0%, #101038 55%, #1b0f35 100%);
+      radial-gradient(ellipse 90% 50% at 50% -10%, #1d3fbf 0%, transparent 62%),
+      linear-gradient(180deg, #010618 0%, #041646 58%, #020a24 100%);
     background-attachment: fixed; }
-  h1.logo { text-align: center; font-size: 30px; margin: 6px 0 14px;
-    background: linear-gradient(180deg, #fff7ae 15%, #ffd94d 45%, #e89b00 75%, #ffe97a 100%);
+  h1.logo { text-align: center; font-size: 30px; margin: 6px 0 14px; line-height: 1.2;
+    background: linear-gradient(180deg, #ffffff 20%, #bfe6ff 55%, #4fd2ff 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 2px 0 #7a2b00) drop-shadow(0 0 16px rgba(255,190,0,.45)); }
-  .card { background: rgba(16,16,48,.9); border: 2px solid #c9a227; border-radius: 16px; padding: 20px; margin-bottom: 16px;
-    box-shadow: 0 0 24px rgba(255,200,0,.15), inset 0 0 40px rgba(60,40,160,.25); }
-  input, select { width: 100%; font-size: 20px; padding: 14px; border-radius: 10px; border: 1px solid #55559e; background: #0d0d2b; color: #fff; margin: 6px 0 12px; text-align: center; }
-  button.join { width: 100%; font-size: 20px; font-weight: bold; border: none; border-radius: 999px; padding: 15px; cursor: pointer; color: #3a2400;
-    background: linear-gradient(180deg, #ffec8a, #ffc21f 55%, #e89b00); box-shadow: 0 4px 0 #8a5a00; }
+    filter: drop-shadow(0 0 14px rgba(79,210,255,.55)); }
+  h1.logo .brand { display: block; font-size: 14px; letter-spacing: .3em; }
+  .card { background: rgba(6,20,64,.88); border: 1px solid rgba(79,210,255,.45); border-radius: 16px; padding: 20px; margin-bottom: 16px; position: relative; z-index: 1;
+    box-shadow: 0 0 24px rgba(61,139,255,.22), inset 0 0 40px rgba(20,40,160,.3); }
+  input, select { width: 100%; font-family: inherit; font-size: 20px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: #06123a; color: #fff; margin: 6px 0 12px; text-align: center; }
+  button.join { width: 100%; font-family: inherit; font-size: 20px; font-weight: bold; border: none; border-radius: 999px; padding: 15px; cursor: pointer; color: #fff;
+    background: linear-gradient(180deg, #5aa2ff, #2a5fe0 55%, #1428a0); box-shadow: 0 4px 0 #0a1660, 0 0 16px rgba(79,210,255,.35); }
   .msg { text-align: center; font-size: 19px; line-height: 1.6; }
   .big { font-size: 29px; font-weight: bold; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .abtn { border: 3px solid rgba(255,255,255,.75); border-radius: 16px; min-height: 128px; font-size: 44px; font-weight: bold; color: #fff; cursor: pointer;
+  .abtn { font-family: inherit; border: 3px solid rgba(255,255,255,.75); border-radius: 16px; min-height: 128px; font-size: 44px; font-weight: bold; color: #fff; cursor: pointer; position: relative; overflow: hidden;
     box-shadow: inset 0 -12px 20px rgba(0,0,0,.35), inset 0 8px 16px rgba(255,255,255,.25), 0 5px 12px rgba(0,0,0,.5); text-shadow: 0 2px 4px rgba(0,0,0,.5); }
   .abtn small { display: block; font-size: 15px; font-weight: normal; margin-top: 4px; padding: 0 6px; }
   .c0 { background: linear-gradient(180deg, #ff5f7a, #d21f3c 60%, #a3122a); }
   .c1 { background: linear-gradient(180deg, #4d94ff, #1256c9 60%, #0b3d94); }
   .c2 { background: linear-gradient(180deg, #ffd94d, #d99a00 60%, #a87400); }
   .c3 { background: linear-gradient(180deg, #3ecf7f, #0d8a4d 60%, #076b3a); }
-  .abtn.picked { outline: 5px solid #ffd94d; transform: scale(.97); }
+  .abtn.pred { border-style: dashed; }
+  .abtn.picked { outline: 5px solid #fff; animation: pickedPulse .45s ease-in-out infinite alternate; }
+  @keyframes pickedPulse { from { transform: scale(.97); } to { transform: scale(1); box-shadow: 0 0 22px rgba(255,255,255,.85); } }
   .abtn:disabled { opacity: .45; }
   .abtn.dim { opacity: .25; }
-  .hidden { display: none !important; }
-  .warn { background: #3a1420; border: 1px solid #a33; color: #fbb; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-size: 14px; }
-  .timer { text-align: center; font-size: 52px; font-weight: bold; color: #ffd94d; text-shadow: 0 0 20px rgba(255,190,0,.6); margin-bottom: 8px; line-height: 1.1; }
-  .timer.danger { color: #ff5f7a; }
-  .consultT { color: #8ef0c1; }
-  .out { color: #ff8098; }
-  .teampoints { text-align: center; font-size: 18px; color: #ffd94d; margin-top: 8px; }
-  #stampBar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(7,7,30,.92); border-top: 1px solid #55559e; display: flex; gap: 10px; justify-content: center; z-index: 40; }
-  #stampBar button { font-size: 26px; border-radius: 999px; border: 1px solid #c9a227; background: linear-gradient(180deg, #3a3a7d, #23235c); padding: 8px 22px; cursor: pointer; }
-  #stampBar button:active { transform: scale(.94); }
-  .spacer { height: 76px; }
-  /* === デザイン格上げ（2026-11-17） === */
-  .abtn { position: relative; overflow: hidden; }
   .abtn::after { content: ""; position: absolute; top: 0; left: -90%; width: 45%; height: 100%;
     background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
     transform: skewX(-20deg); animation: shine 2.8s ease-in-out infinite; pointer-events: none; }
-  .grid .abtn:nth-child(2)::after { animation-delay: .4s; }
-  .grid .abtn:nth-child(3)::after { animation-delay: .8s; }
-  .grid .abtn:nth-child(4)::after { animation-delay: 1.2s; }
+  .abtn:disabled::after { animation: none; }
   @keyframes shine { 0%, 50% { left: -90%; } 85%, 100% { left: 140%; } }
-  .abtn.picked { animation: pickedPulse .45s ease-in-out infinite alternate; }
-  @keyframes pickedPulse { from { transform: scale(.97); } to { transform: scale(1); box-shadow: 0 0 22px rgba(255,217,77,.85), inset 0 -12px 20px rgba(0,0,0,.35), inset 0 8px 16px rgba(255,255,255,.25); } }
-  .timer.danger { animation: pulseP .5s infinite alternate; }
-  @keyframes pulseP { from { transform: scale(1); } to { transform: scale(1.08); } }
-  .win { animation: winBounce .55s ease 2; color: #ffd94d !important; text-shadow: 0 0 18px rgba(255,200,0,.85); }
+  .hidden { display: none !important; }
+  .warn { background: #3a1420; border: 1px solid #a33; color: #fbb; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-size: 14px; }
+  .timer { text-align: center; font-size: 52px; font-weight: bold; color: var(--cyan); text-shadow: 0 0 20px rgba(79,210,255,.65); margin-bottom: 8px; line-height: 1.1; min-height: 57px; }
+  .timer.danger { color: #ff5f7a; animation: pulseP .5s infinite alternate; }
+  @keyframes pulseP { from { transform: scale(1); } to { transform: scale(1.12); } }
+  .consultT { color: #8ef0c1; }
+  .out { color: #ff8098; }
+  .badge { display: inline-block; font-size: 15px; padding: 3px 12px; border-radius: 999px; margin-bottom: 8px; border: 1px solid var(--line); background: #0b1a4d; }
+  .badge.predB { color: #e0c8ff; border-color: #9a6bff; }
+  .teampoints { text-align: center; font-size: 17px; color: var(--cyan); margin-top: 8px; }
+  #stampBar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(2,10,36,.94); border-top: 1px solid var(--line); display: flex; gap: 10px; justify-content: center; z-index: 40; }
+  #stampBar button { font-size: 26px; border-radius: 999px; border: 1px solid rgba(79,210,255,.5); background: linear-gradient(180deg, #1c2f6e, #12204f); padding: 8px 22px; cursor: pointer; }
+  #stampBar button:active { transform: scale(.94); }
+  .spacer { height: 76px; }
+  .win { animation: winBounce .55s ease 2; color: #fff !important; text-shadow: 0 0 18px rgba(79,210,255,.95); }
   @keyframes winBounce { 0% { transform: scale(1); } 40% { transform: scale(1.16); } 100% { transform: scale(1); } }
-  .twinkles { position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background:
-      radial-gradient(2px 2px at 22% 14%, #fff 50%, transparent 51%),
-      radial-gradient(1.5px 1.5px at 63% 30%, #ffe9a8 50%, transparent 51%),
-      radial-gradient(2px 2px at 81% 9%, #fff 50%, transparent 51%),
-      radial-gradient(1.5px 1.5px at 41% 55%, #fff 50%, transparent 51%);
-    animation: twinkle 2.6s ease-in-out infinite alternate; }
-  @keyframes twinkle { from { opacity: .25; } to { opacity: .95; } }
+  .link { background: none; border: none; color: var(--muted); text-decoration: underline; font-size: 14px; margin-top: 10px; width: 100%; cursor: pointer; font-family: inherit; }
 </style>
 </head>
 <body>
-  <div class="twinkles"></div>
-  <h1 class="logo">★クイズ・オールスター★</h1>
+  <h1 class="logo"><span class="brand">Samsung Galaxy</span>感謝祭</h1>
   <div id="configWarn" class="warn hidden">Firebaseの設定がまだ貼られていません。主催者に確認してください。</div>
 
   <!-- 参加 -->
@@ -97,6 +89,7 @@
     <p class="msg big" id="waitName"></p>
     <p class="msg" id="waitTeam"></p>
     <p class="msg" id="waitMsg">参加できたよ！<br>クイズ開始まで待っててね</p>
+    <p class="msg" style="font-size:14px;color:var(--muted);margin-top:8px">画面が消えても大丈夫。もう一度このページを開けば続きから参加できます</p>
     <p class="teampoints" id="waitPoints"></p>
   </div>
 
@@ -108,8 +101,9 @@
     <p class="msg">チームで話し合おう。<br>回答はこのあと始まるよ</p>
   </div>
 
-  <!-- 回答 -->
+  <!-- 回答・予想 -->
   <div class="card hidden" id="ansCard">
+    <div style="text-align:center"><span class="badge" id="roleBadge"></span></div>
     <div class="timer" id="timerView"></div>
     <p class="msg" id="qTextP" style="margin-bottom:12px"></p>
     <div class="grid" id="btnGrid"></div>
@@ -123,6 +117,7 @@
     <p class="teampoints" id="resultPoints"></p>
   </div>
 
+  <p class="teampoints" id="audView"></p>
   <div class="spacer"></div>
   <div id="stampBar" class="hidden">
     <button data-stamp="👏">👏</button>
@@ -148,6 +143,7 @@ const firebaseConfig = {
 
 const COLORS = ["c0","c1","c2","c3"];
 const LABELS = ["A","B","C","D"];
+const SESSION_KEY = "galaxyq_session";
 let db = null;
 if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
   firebase.initializeApp(firebaseConfig);
@@ -155,157 +151,284 @@ if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
 } else {
   document.getElementById("configWarn").classList.remove("hidden");
 }
+// サーバーの時計に合わせる
+let serverOffset = 0;
+if (db) db.ref(".info/serverTimeOffset").on("value", s => { serverOffset = s.val() || 0; });
+const now = () => Date.now() + serverOffset;
+const $ = id => document.getElementById(id);
 
-let pin = null, myId = null, myTeam = null, myTeamName = "", myAlive = true, myRep = false,
-    currentQi = -1, picked = -1, timerInt = null, lastStamp = 0, shownKey = "";
+let pin = null, myId = null, myTeam = null, myTeamName = "", myName = "", myAlive = true, myRep = false, myAud = 0, myExists = false;
+let currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
 
-const err = m => document.getElementById("joinErr").textContent = m;
+const err = m => $("joinErr").textContent = m;
 
-document.getElementById("pinBtn").onclick = async () => {
+// ===== 前回の続きから参加（画面ロック・再読み込み対策） =====
+(async () => {
+  if (!db) return;
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch(e) {}
+  if (!s || !s.pin || !s.myId) return;
+  err("前回の参加を確認中…");
+  const ps = await db.ref(`rooms/${s.pin}/players/${s.myId}`).once("value");
+  if (!ps.exists()) { localStorage.removeItem(SESSION_KEY); err(""); return; }
+  pin = s.pin; myId = s.myId;
+  const p = ps.val();
+  myTeam = p.team; myName = p.name;
+  const t = await db.ref(`rooms/${pin}/teams/${myTeam}/name`).once("value");
+  myTeamName = t.val() || "";
+  err("");
+  enterRoom();
+})();
+
+$("pinBtn").onclick = async () => {
   if (!db) { err("設定がまだです。主催者に確認してね"); return; }
-  pin = document.getElementById("pinIn").value.trim();
+  pin = $("pinIn").value.trim();
   if (pin.length !== 4) { err("番号は4けたで入れてね"); return; }
   const snap = await db.ref("rooms/" + pin + "/teams").once("value");
   if (!snap.exists()) { err("その番号の部屋が見つからないよ"); return; }
   const teams = snap.val();
-  const sel = document.getElementById("teamSel");
-  sel.innerHTML = Object.entries(teams).map(([tid, t]) => `<option value="${tid}">${t.name}</option>`).join("");
-  document.getElementById("joinStep2").classList.remove("hidden");
+  const sel = $("teamSel");
+  sel.innerHTML = "";
+  Object.entries(teams).forEach(([tid, t]) => { const o = document.createElement("option"); o.value = tid; o.textContent = t.name; sel.appendChild(o); });
+  $("joinStep2").classList.remove("hidden");
   err("");
 };
 
-document.getElementById("joinBtn").onclick = async () => {
-  const name = document.getElementById("nameIn").value.trim();
-  myTeam = document.getElementById("teamSel").value;
+$("joinBtn").onclick = async () => {
+  const name = $("nameIn").value.trim();
+  myTeam = $("teamSel").value;
   if (!name) { err("名前を入れてね"); return; }
+  $("joinBtn").disabled = true;
+  const ps = await db.ref("rooms/" + pin + "/players").once("value");
+  if (Object.values(ps.val() || {}).some(p => p.name === name)) {
+    err("同じ名前の人がいるよ。少し変えてね（例：たろう2）");
+    $("joinBtn").disabled = false;
+    return;
+  }
   const tSnap = await db.ref("rooms/" + pin + "/teams/" + myTeam + "/name").once("value");
   myTeamName = tSnap.val() || "";
   const ref = db.ref("rooms/" + pin + "/players").push();
-  myId = ref.key;
-  await ref.set({ name, team: myTeam, alive: true, score: 0, rep: false });
-  ref.onDisconnect().remove();
-  document.getElementById("joinCard").classList.add("hidden");
-  document.getElementById("stampBar").classList.remove("hidden");
-  document.getElementById("waitName").textContent = name + " さん";
-  document.getElementById("waitTeam").textContent = "チーム：" + myTeamName;
-  show("waitCard");
-  watch();
+  myId = ref.key; myName = name;
+  await ref.set({ name, team: myTeam, alive: true, score: 0, rep: false, audPts: 0, online: true });
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ pin, myId }));
+  enterRoom();
 };
 
-function show(id) {
-  ["waitCard","consultCard","ansCard","resultCard"].forEach(x =>
-    document.getElementById(x).classList.toggle("hidden", x !== id));
+function enterRoom() {
+  $("joinCard").classList.add("hidden");
+  $("stampBar").classList.remove("hidden");
+  $("waitName").textContent = myName + " さん";
+  $("waitTeam").textContent = "チーム：" + myTeamName;
+  show("waitCard");
+  watch();
 }
-function startTimer(endsAt, elId, danger) {
+
+function show(id) {
+  ["waitCard","consultCard","ansCard","resultCard"].forEach(x => $(x).classList.toggle("hidden", x !== id));
+}
+function startTimer(endsAt, elId, danger, onEnd) {
   clearInterval(timerInt);
-  const el = document.getElementById(elId);
+  const el = $(elId);
+  el.classList.remove("danger");
   timerInt = setInterval(() => {
-    const left = Math.max(0, endsAt - Date.now());
+    const left = Math.max(0, endsAt - now());
     el.textContent = Math.ceil(left / 1000);
-    if (danger) el.classList.toggle("danger", left <= 3000 && left > 0);
-    if (left <= 0) clearInterval(timerInt);
+    if (danger) el.classList.toggle("danger", left <= 5000 && left > 0);
+    if (left <= 0) { clearInterval(timerInt); if (onEnd) onEnd(); }
   }, 100);
+}
+
+function renderButtons(q, kind, enabled, chosen) {
+  const grid = $("btnGrid");
+  grid.innerHTML = "";
+  q.choices.forEach((c, j) => {
+    const b = document.createElement("button");
+    b.className = `abtn ${COLORS[j]} ${kind === "pred" ? "pred" : ""}`;
+    b.innerHTML = LABELS[j] + "<small></small>";
+    b.querySelector("small").textContent = c;
+    b.disabled = !enabled || chosen >= 0;
+    if (chosen >= 0) b.classList.add(j === chosen ? "picked" : "dim");
+    b.onclick = () => (kind === "pred" ? predict(j) : pick(j));
+    grid.appendChild(b);
+  });
 }
 
 function watch() {
   const room = db.ref("rooms/" + pin);
+  // 通信が切れたら「オフライン」にするだけで、名簿からは消さない
+  db.ref(".info/connected").on("value", s => {
+    if (s.val() !== true || !myExists) return;
+    const r = room.child("players/" + myId);
+    r.child("online").onDisconnect().set(false);
+    r.child("online").set(true);
+  });
   room.child("players/" + myId).on("value", s => {
-    const p = s.val(); if (!p) return;
-    myAlive = p.alive !== false; myRep = !!p.rep;
+    const p = s.val();
+    if (!p) {
+      if (myExists) {
+        // 主催者に外された／部屋が閉じられた
+        localStorage.removeItem(SESSION_KEY);
+        room.off(); db.ref(".info/connected").off();
+        clearInterval(timerInt);
+        show("");
+        $("stampBar").classList.add("hidden");
+        $("joinCard").classList.remove("hidden");
+        $("joinStep2").classList.add("hidden");
+        err("部屋が終了したか、参加が取り消されました。もう一度参加するときは番号を入れてね");
+      }
+      return;
+    }
+    const first = !myExists;
+    myExists = true;
+    if (first) {
+      room.child("players/" + myId + "/online").onDisconnect().set(false);
+      room.child("players/" + myId + "/online").set(true);
+    }
+    myAlive = p.alive !== false; myRep = !!p.rep; myAud = p.audPts || 0;
+    $("audView").textContent = myAud > 0 ? `🔮 観客ポイント：${myAud}` : "";
   });
   room.child("teamState/" + myTeam + "/points").on("value", s => {
     const txt = "チームの点数：" + (s.val() || 0) + "点";
-    document.getElementById("waitPoints").textContent = txt;
-    document.getElementById("resultPoints").textContent = txt;
+    $("waitPoints").textContent = txt;
+    $("resultPoints").textContent = txt;
   });
   room.child("meta").on("value", async snap => {
     const meta = snap.val();
     if (!meta) return;
-    if (meta.state === "consult" && shownKey !== meta.qi + "c") {
-      shownKey = meta.qi + "c";
-      currentQi = meta.qi; picked = -1;
-      const qSnap = await room.child("question").once("value");
-      const q = qSnap.val();
-      document.getElementById("consultQ").textContent = q ? q.text : "";
+    const key = [meta.state, meta.qi, meta.period].join(":");
+    if (key === shownKey) return;
+    shownKey = key;
+    const mode = meta.mode || "points";
+    if (meta.qi !== currentQi && ["consult","reading","question"].includes(meta.state)) {
+      currentQi = meta.qi; picked = -1; predicted = -1;
+    }
+    if (meta.state === "lobby") { show("waitCard"); return; }
+
+    if (meta.state === "consult") {
+      const q = (await room.child("question").once("value")).val();
+      $("consultQ").textContent = q ? q.text : "";
       show("consultCard");
-      startTimer(meta.endsAt || 0, "consultTimer", false);
+      startTimer(meta.endsAt || 0, "consultTimer", true);
+      return;
     }
-    if (meta.state === "question" && shownKey !== meta.qi + "q") {
-      shownKey = meta.qi + "q";
-      currentQi = meta.qi; picked = -1;
-      const qSnap = await room.child("question").once("value");
-      const q = qSnap.val();
+
+    if (meta.state === "reading" || meta.state === "question") {
+      const q = (await room.child("question").once("value")).val();
       if (!q) return;
-      document.getElementById("qTextP").textContent = q.text;
-      const grid = document.getElementById("btnGrid");
-      const mode = meta.mode || "points";
-      if (mode === "rep" && !myRep) {
-        grid.innerHTML = "";
-        document.getElementById("pickedMsg").innerHTML = "代表者対決！<br>チームの代表を応援しよう📣";
-      } else if (!myAlive) {
-        grid.innerHTML = "";
-        document.getElementById("pickedMsg").innerHTML = "<span class='out'>脱落中…</span><br>チームの応援をしよう📣";
-      } else {
-        grid.innerHTML = q.choices.map((c,j)=>`<button class="abtn ${COLORS[j]}" data-j="${j}">${LABELS[j]}<small>${c}</small></button>`).join("");
-        grid.querySelectorAll(".abtn").forEach(b => b.onclick = () => pick(+b.dataset.j));
-        document.getElementById("pickedMsg").textContent = myRep && mode === "rep" ? "代表として回答！チームのために！" : "色をタップして回答！";
+      role = (myAlive && (mode !== "rep" || myRep)) ? "ans" : "pred";
+      $("qTextP").textContent = q.text;
+      $("roleBadge").className = "badge" + (role === "pred" ? " predB" : "");
+      $("roleBadge").textContent = role === "pred" ? (myAlive ? "📣 代表者対決：予想で参加" : "🔮 予想投票で参加中") : "✋ 回答者";
+      if (meta.state === "reading") {
+        clearInterval(timerInt);
+        $("timerView").textContent = "";
+        $("timerView").classList.remove("danger");
+        renderButtons(q, role, false, -1);
+        $("pickedMsg").textContent = role === "pred" ? "問題を読み上げ中…合図で予想スタート！" : "問題を読み上げ中…合図で回答スタート！";
+        show("ansCard");
+        return;
       }
+      curEndsAt = meta.endsAt || 0;
+      // 再接続したときのために、すでに送った回答・予想を読み込む
+      const path = role === "pred" ? "predictions" : "answers";
+      const prev = (await room.child(`${path}/${meta.qi}/${myId}`).once("value")).val();
+      if (prev) { if (role === "pred") predicted = prev.choice; else picked = prev.choice; }
+      const chosen = role === "pred" ? predicted : picked;
+      const open = now() < curEndsAt;
+      renderButtons(q, role, open, chosen);
+      if (chosen >= 0) $("pickedMsg").textContent = `${LABELS[chosen]} で${role === "pred" ? "予想" : "回答"}したよ。結果を待とう`;
+      else if (!open) $("pickedMsg").textContent = "締切！ 結果を待とう";
+      else $("pickedMsg").textContent = role === "pred"
+        ? "正解だと思う色をタップ！当たると観客ポイント"
+        : (myRep && mode === "rep" ? "代表として回答！チームのために！" : "色をタップして回答！");
       show("ansCard");
-      startTimer(meta.endsAt || 0, "timerView", true);
+      startTimer(curEndsAt, "timerView", true, () => {
+        if ((role === "pred" ? predicted : picked) < 0) {
+          $("btnGrid").querySelectorAll(".abtn").forEach(b => b.disabled = true);
+          $("pickedMsg").textContent = "締切！ 結果を待とう";
+        }
+      });
+      return;
     }
-    if (meta.state === "reveal" && currentQi === meta.qi) {
+
+    if (meta.state === "reveal") {
       clearInterval(timerInt);
       const correct = meta.correct;
       const gain = meta.gains && meta.gains[myTeam] ? meta.gains[myTeam].pts : 0;
-      const mode = meta.mode || "points";
-      let msg, sub;
-      if (mode === "rep" && !myRep) {
-        msg = "正解発表";
-        sub = `正解は ${LABELS[correct]}。チームは +${gain}点`;
-      } else if (!myAlive && picked !== correct) {
-        msg = "<span class='out'>脱落…！</span>";
-        sub = "おつかれさま。応援と予想で盛り上げよう";
+      let msg, sub, win = false;
+      if (currentQi !== meta.qi) {
+        msg = "正解発表"; sub = `正解は ${LABELS[correct]} でした`;
+      } else if (role === "pred") {
+        if (predicted === correct) { msg = "🔮 予想的中！"; sub = "観客ポイント +1"; win = true; }
+        else if (predicted === -1) { msg = "正解発表"; sub = `正解は ${LABELS[correct]}。次は予想してみよう`; }
+        else { msg = "予想ハズレ…"; sub = `正解は ${LABELS[correct]} でした`; }
       } else if (picked === correct) {
-        msg = "🎉 正解！";
-        sub = `チームに +${gain}点`;
+        msg = "🎉 正解！"; win = true;
+        sub = mode === "survival" ? "生き残り！次もがんばろう" : `チームに +${gain}点`;
+      } else if (mode === "survival") {
+        msg = "<span class='out'>脱落…！</span>";
+        sub = `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！`;
       } else if (picked === -1) {
-        msg = "時間切れ…";
-        sub = `正解は ${LABELS[correct]} でした`;
+        msg = "時間切れ…"; sub = `正解は ${LABELS[correct]} でした`;
       } else {
-        msg = "残念、不正解";
-        sub = `正解は ${LABELS[correct]} でした`;
+        msg = "残念、不正解"; sub = `正解は ${LABELS[correct]} でした`;
       }
-      document.getElementById("resultMsg").classList.toggle("win", picked === correct);
-      document.getElementById("resultMsg").innerHTML = msg;
-      document.getElementById("resultSub").textContent = sub;
+      $("resultMsg").classList.toggle("win", win);
+      $("resultMsg").innerHTML = msg;
+      $("resultSub").textContent = sub;
       show("resultCard");
+      return;
     }
+
+    if (meta.state === "period") {
+      clearInterval(timerInt);
+      const me = meta.winnerPid && meta.winnerPid === myId;
+      $("resultMsg").classList.toggle("win", !!me);
+      $("resultMsg").textContent = me ? "🏆 ピリオド優勝！" : `ピリオド${meta.period} 終了！`;
+      $("resultSub").textContent = (meta.winner ? `優勝：${meta.winner}さん。` : "") + "全員復活！次のピリオドもがんばろう";
+      show("resultCard");
+      return;
+    }
+
     if (meta.state === "finished") {
       clearInterval(timerInt);
-      const won = meta.champTeam && meta.champTeam === myTeam;
-      document.getElementById("resultMsg").textContent = won ? "🏆 チーム優勝！" : "結果発表";
-      document.getElementById("resultSub").textContent = "順位は大画面を見てね。おつかれさま！";
+      let msg = "結果発表", win = false;
+      if (meta.champPid === myId) { msg = "🏆 優勝！Galaxyマスター！"; win = true; }
+      else if (meta.audKingPid === myId) { msg = "🔮 観客王！"; win = true; }
+      else if (meta.champTeam && meta.champTeam === myTeam) { msg = "🤝 ベストチーム賞！"; win = true; }
+      $("resultMsg").classList.toggle("win", win);
+      $("resultMsg").textContent = msg;
+      $("resultSub").textContent = "順位は大画面を見てね。おつかれさま！";
       show("resultCard");
     }
   });
 }
 
-async function pick(j) {
-  if (picked >= 0) return;
-  picked = j;
-  document.querySelectorAll(".abtn").forEach((b, k) => {
+async function send(path, j) {
+  $("btnGrid").querySelectorAll(".abtn").forEach((b, k) => {
     b.disabled = true;
-    if (k === j) b.classList.add("picked"); else b.classList.add("dim");
+    b.classList.add(k === j ? "picked" : "dim");
   });
-  document.getElementById("pickedMsg").textContent = LABELS[j] + " で回答したよ。結果を待とう";
-  await db.ref(`rooms/${pin}/answers/${currentQi}/${myId}`).set({ choice: j, t: Date.now() });
+  await db.ref(`rooms/${pin}/${path}/${currentQi}/${myId}`).set({ choice: j, t: firebase.database.ServerValue.TIMESTAMP });
+}
+async function pick(j) {
+  if (picked >= 0 || now() > curEndsAt) return;
+  picked = j;
+  $("pickedMsg").textContent = LABELS[j] + " で回答したよ。結果を待とう";
+  await send("answers", j);
+}
+async function predict(j) {
+  if (predicted >= 0 || now() > curEndsAt) return;
+  predicted = j;
+  $("pickedMsg").textContent = LABELS[j] + " を予想したよ。結果を待とう";
+  await send("predictions", j);
 }
 
 document.querySelectorAll("#stampBar button").forEach(b => b.onclick = async () => {
-  const now = Date.now();
-  if (now - lastStamp < 1500 || !pin) return;
-  lastStamp = now;
-  await db.ref(`rooms/${pin}/stamps`).push({ e: b.dataset.stamp, t: now });
+  const t = Date.now();
+  if (t - lastStamp < 1500 || !pin) return;
+  lastStamp = t;
+  await db.ref(`rooms/${pin}/stamps`).push({ e: b.dataset.stamp, t });
 });
 </script>
 </body>
