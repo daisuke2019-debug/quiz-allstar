@@ -171,6 +171,12 @@ const COLORS = ["c0","c1","c2","c3"];
 const LABELS = ["A","B","C","D"];
 const SESSION_KEY = "galaxyq_session";
 let db = null;
+if (typeof firebase === "undefined") {
+  // 通信の部品（Firebase）が読み込めなかった（回線の瞬断など）→ 自動で読み込み直す
+  document.body.insertAdjacentHTML("afterbegin", '<div class="warn" style="position:relative;z-index:99;font-size:18px;text-align:center">通信が不安定なため読み込めませんでした。<br>3秒後に自動で読み込み直します…</div>');
+  setTimeout(() => location.reload(), 3000);
+  throw new Error("firebase not loaded");
+}
 if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
@@ -184,7 +190,7 @@ const now = () => Date.now() + serverOffset;
 const $ = id => document.getElementById(id);
 
 let pin = null, myId = null, myTeam = null, myTeamName = "", myName = "", myAlive = true, myRep = false, myAud = 0, myExists = false;
-let metaSeq = 0, currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
+let qCache = null, readyQi = -1, metaSeq = 0, currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
 
 const err = m => $("joinErr").textContent = m;
 
@@ -246,6 +252,7 @@ function enterRoom() {
   $("waitName").textContent = myName + " さん";
   $("waitTeam").textContent = "チーム：" + myTeamName;
   show("waitCard");
+  keepScreenOn();
   watch();
 }
 
@@ -265,7 +272,39 @@ function heartbeat() {
   if (!myExists || !connected) return;
   db.ref(`rooms/${pin}/players/${myId}`).update({ online: true, hb: firebase.database.ServerValue.TIMESTAMP });
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") heartbeat(); });
+// ===== 画面を消さない（対応しているスマホのみ。ページを開いている間だけ） =====
+let wakeLock = null;
+async function keepScreenOn() {
+  try {
+    if (!("wakeLock" in navigator) || document.visibilityState !== "visible" || wakeLock) return;
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch (e) { wakeLock = null; }
+}
+// ===== 通信が長く切れたときの自動復旧 =====
+// 15秒つながらない → 接続をやり直す。さらに続き、ネットが戻っていればページを読み込み直す（続きから参加できる）
+let lostAt = 0, recoverInt = null;
+function startRecovery() {
+  if (recoverInt) return;
+  lostAt = Date.now();
+  recoverInt = setInterval(() => {
+    if (connected) { clearInterval(recoverInt); recoverInt = null; return; }
+    const gone = Date.now() - lostAt;
+    if (gone >= 15000 && gone < 40000) { try { db.goOffline(); db.goOnline(); } catch (e) {} }
+    if (gone >= 40000 && navigator.onLine && document.visibilityState === "visible" && localStorage.getItem(SESSION_KEY)) {
+      clearInterval(recoverInt); recoverInt = null;
+      location.reload();
+    }
+  }, 5000);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  keepScreenOn();
+  heartbeat();
+  // スマホを開き直したときに切れていたら、すぐ接続をやり直す
+  if (myExists && !connected) { try { db.goOffline(); db.goOnline(); } catch (e) {} }
+});
+window.addEventListener("online", () => { if (myExists && !connected) { try { db.goOffline(); db.goOnline(); } catch (e) {} } });
 function startTimer(endsAt, elId, danger, onEnd) {
   clearInterval(timerInt);
   const el = $(elId);
@@ -323,12 +362,13 @@ function watch() {
   listen(db.ref(".info/connected"), s => {
     connected = s.val() === true;
     renderConn();
-    if (!connected || !myExists) return;
+    if (!connected) { if (myExists) startRecovery(); return; }
+    if (!myExists) return;
     room.child("players/" + myId + "/online").onDisconnect().set(false);
     heartbeat();
   });
   // 問題文を常に受け取っておく（出題の瞬間にすぐ表示できるように）
-  listen(room.child("question"), () => {});
+  listen(room.child("question"), s => { qCache = s.val(); });
   clearInterval(hbInt);
   hbInt = setInterval(heartbeat, 10000);
   listen(room.child("players/" + myId), s => {
@@ -391,8 +431,11 @@ function watch() {
       return;
     }
 
+    // 手元に届いている問題文をすぐ使う（サーバーへの問い合わせ待ちをなくす）
+    const getQ = async () => (qCache && qCache.qi === meta.qi) ? qCache : (await room.child("question").once("value")).val();
     if (meta.state === "consult") {
-      const q = (await room.child("question").once("value")).val();
+      const q = await getQ();
+      readyQi = meta.qi;
       if (stale()) return;
       $("consultQ").textContent = q ? q.text : "";
       show("consultCard");
@@ -401,7 +444,7 @@ function watch() {
     }
 
     if (meta.state === "reading" || meta.state === "question") {
-      const q = (await room.child("question").once("value")).val();
+      const q = await getQ();
       if (!q || stale()) return;
       role = (myAlive && (mode !== "rep" || myRep)) ? "ans" : "pred";
       $("qTextP").textContent = q.text;
@@ -409,6 +452,7 @@ function watch() {
       $("roleBadge").textContent = role === "pred" ? "予想で参加" : "✋ 回答者";
       setRoleView(role === "pred");
       if (meta.state === "reading") {
+        readyQi = meta.qi;
         clearInterval(timerInt);
         $("timerView").textContent = "";
         $("timerView").classList.remove("danger");
@@ -419,10 +463,13 @@ function watch() {
       }
       curEndsAt = meta.endsAt || 0;
       // 再接続したときのために、すでに送った回答・予想を読み込む
-      const path = role === "pred" ? "predictions" : "answers";
-      const prev = (await room.child(`${path}/${meta.qi}/${myId}`).once("value")).val();
-      if (stale()) return;
-      if (prev) { if (role === "pred") predicted = prev.choice; else picked = prev.choice; }
+      // 読み上げ中から見ていた問題なら、まだ答えていないので問い合わせは不要（すぐ押せるようにする）
+      if (readyQi !== meta.qi) {
+        const path = role === "pred" ? "predictions" : "answers";
+        const prev = (await room.child(`${path}/${meta.qi}/${myId}`).once("value")).val();
+        if (stale()) return;
+        if (prev) { if (role === "pred") predicted = prev.choice; else picked = prev.choice; }
+      }
       const chosen = role === "pred" ? predicted : picked;
       const open = now() < curEndsAt;
       if (open && chosen < 0 && navigator.vibrate) navigator.vibrate(120);

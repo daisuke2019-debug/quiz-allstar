@@ -348,8 +348,13 @@ const firebaseConfig = {
 
 const COLORS = ["c0","c1","c2","c3"];
 const LABELS = ["A","B","C","D"];
-const GRACE_MS = 1000; // 締切後に届いた回答を受け付ける猶予（通信の遅れ分）
+const GRACE_MS = 2500; // 締切前に押した回答が、回線の遅れで締切後に届いても受け付ける猶予
 let db = null;
+if (typeof firebase === "undefined") {
+  // 通信の部品（Firebase）が読み込めなかった（回線の瞬断など）
+  document.body.insertAdjacentHTML("afterbegin", '<div class="warn" style="position:relative;z-index:99;font-size:20px;text-align:center">通信の部品を読み込めませんでした。ネット接続を確認して、ページを再読み込み（F5）してください。</div>');
+  throw new Error("firebase not loaded");
+}
 if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
@@ -841,7 +846,7 @@ $("askBtn").onclick = async () => {
   showTicker("");
   $("qNum").textContent = `第${qi+1}問 ／ 全${questions.length}問（${ {points:"通常",consult:"相談タイムつき",survival:"サバイバル",rep:"代表者対決"}[curMode] }）`;
   // 問題文を先に書いてから状態を変える（スマホが古い問題を読まないように）
-  await roomRef().child("question").set({ text: q.text, choices: q.choices });
+  await roomRef().child("question").set({ text: q.text, choices: q.choices, qi });
   clearInterval(timerInt);
   if (curMode === "consult") {
     const secs = +$("consultSel").value;
@@ -940,11 +945,8 @@ $("revealBtn").onclick = async () => {
   stopSound("think"); stopSound("consult");
   liveOff.forEach(f => f()); liveOff = [];
   const q = questions[qi];
-  const [ansSnap, predSnap] = await Promise.all([
-    roomRef().child("answers/" + qi).once("value"),
-    roomRef().child("predictions/" + qi).once("value")
-  ]);
-  const rawAns = ansSnap.val() || {}, preds = predSnap.val() || {};
+  // 出題中ずっと受け取っていた回答・予想をそのまま使う（サーバーへの問い合わせ待ちをなくす）
+  const rawAns = { ...curAnsSet }, preds = { ...curPredSet };
   const inTime = a => a && (typeof a.t !== "number" || a.t <= curEndsAt + GRACE_MS);
   // 答えてよい人の、締切までの回答だけを使う
   const answers = {};
@@ -1019,8 +1021,10 @@ $("revealBtn").onclick = async () => {
   speed.sort((a, b) => a.sec - b.sec);
   if (speed[0]) fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
   periodDirty = true;
-  await roomRef().update(updates);
-  await roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode });
+  // 保存はうしろで行い、大画面の発表は待たせない（回線が遅くても止まらない）
+  roomRef().update(updates)
+    .then(() => roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode }))
+    .catch(() => { $("offView").textContent = "⚠️ 結果の保存に失敗しました。ネット接続を確認してください"; });
 
   // ④ 正解の発表
   counts.forEach((n, j) => { if (j !== q.correct) $("ch" + j).classList.add("dim"); });
