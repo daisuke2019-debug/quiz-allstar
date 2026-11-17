@@ -63,6 +63,12 @@
   .spacer { height: 76px; }
   .win { animation: winBounce .55s ease 2; color: #fff !important; text-shadow: 0 0 18px rgba(79,210,255,.95); }
   @keyframes winBounce { 0% { transform: scale(1); } 40% { transform: scale(1.16); } 100% { transform: scale(1); } }
+  #ansCard.predMode { border-color: #b48cff; background: rgba(34,14,72,.92); box-shadow: 0 0 26px rgba(154,107,255,.45); }
+  .predBanner { text-align: center; font-size: 22px; font-weight: bold; color: #f0e4ff; background: linear-gradient(90deg, #5b2bb5, #8a4dff, #5b2bb5); border-radius: 12px; padding: 10px; margin-bottom: 10px; line-height: 1.4; }
+  .predBanner small { display: block; font-size: 14px; font-weight: normal; }
+  .abtn.wait { filter: grayscale(.55) brightness(.8); }
+  .abtn.wait::after { animation: none; }
+  #toast { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); background: rgba(255,95,122,.95); color: #fff; font-size: 22px; font-weight: bold; padding: 16px 24px; border-radius: 14px; z-index: 80; text-align: center; pointer-events: none; white-space: pre-line; }
   .link { background: none; border: none; color: var(--muted); text-decoration: underline; font-size: 14px; margin-top: 10px; width: 100%; cursor: pointer; font-family: inherit; }
 </style>
 </head>
@@ -103,6 +109,7 @@
 
   <!-- 回答・予想 -->
   <div class="card hidden" id="ansCard">
+    <div class="predBanner hidden" id="predBanner"></div>
     <div style="text-align:center"><span class="badge" id="roleBadge"></span></div>
     <div class="timer" id="timerView"></div>
     <p class="msg" id="qTextP" style="margin-bottom:12px"></p>
@@ -117,6 +124,7 @@
     <p class="teampoints" id="resultPoints"></p>
   </div>
 
+  <div id="toast" class="hidden"></div>
   <p class="teampoints" id="audView"></p>
   <div class="spacer"></div>
   <div id="stampBar" class="hidden">
@@ -158,7 +166,7 @@ const now = () => Date.now() + serverOffset;
 const $ = id => document.getElementById(id);
 
 let pin = null, myId = null, myTeam = null, myTeamName = "", myName = "", myAlive = true, myRep = false, myAud = 0, myExists = false;
-let currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
+let metaSeq = 0, currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
 
 const err = m => $("joinErr").textContent = m;
 
@@ -238,19 +246,39 @@ function startTimer(endsAt, elId, danger, onEnd) {
   }, 100);
 }
 
-function renderButtons(q, kind, enabled, chosen) {
+let toastT = null;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.remove("hidden");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.add("hidden"), 1600);
+}
+// state: "wait"＝読み上げ中（押すと「まだです」）／"open"＝回答できる／"closed"＝締切
+function renderButtons(q, kind, state, chosen) {
   const grid = $("btnGrid");
   grid.innerHTML = "";
   q.choices.forEach((c, j) => {
     const b = document.createElement("button");
-    b.className = `abtn ${COLORS[j]} ${kind === "pred" ? "pred" : ""}`;
+    b.className = `abtn ${COLORS[j]} ${kind === "pred" ? "pred" : ""} ${state === "wait" ? "wait" : ""}`;
     b.innerHTML = LABELS[j] + "<small></small>";
     b.querySelector("small").textContent = c;
-    b.disabled = !enabled || chosen >= 0;
+    b.disabled = state === "closed" || chosen >= 0;
     if (chosen >= 0) b.classList.add(j === chosen ? "picked" : "dim");
-    b.onclick = () => (kind === "pred" ? predict(j) : pick(j));
+    b.onclick = () => {
+      if (state === "wait") { toast("まだです！\n司会の「回答スタート」の合図を待ってね"); return; }
+      kind === "pred" ? predict(j) : pick(j);
+    };
     grid.appendChild(b);
   });
+}
+function setRoleView(isPred) {
+  $("ansCard").classList.toggle("predMode", isPred);
+  $("predBanner").classList.toggle("hidden", !isPred);
+  $("predBanner").innerHTML = isPred
+    ? (myAlive ? "📣 代表者対決：あなたは予想で参加<small>当たると観客ポイント（チームの点にはなりません）</small>"
+               : "🔮 あなたは脱落中：予想投票<small>当たると観客ポイント。次のピリオドで復活できます</small>")
+    : "";
 }
 
 function watch() {
@@ -266,7 +294,9 @@ function watch() {
     const p = s.val();
     if (!p) {
       if (myExists) {
-        // 主催者に外された／部屋が閉じられた
+        // 主催者に外された／部屋が閉じられた（切断時の書き込み予約も取り消す＝消えた部屋を作り直さない）
+        room.child("players/" + myId + "/online").onDisconnect().cancel();
+        myExists = false;
         localStorage.removeItem(SESSION_KEY);
         room.off(); db.ref(".info/connected").off();
         clearInterval(timerInt);
@@ -298,6 +328,9 @@ function watch() {
     const key = [meta.state, meta.qi, meta.period].join(":");
     if (key === shownKey) return;
     shownKey = key;
+    // 読み込み待ちの間に次の状態が来たら、古い方の表示は捨てる（順番の入れ替わり対策）
+    const seq = ++metaSeq;
+    const stale = () => seq !== metaSeq;
     const mode = meta.mode || "points";
     if (meta.qi !== currentQi && ["consult","reading","question"].includes(meta.state)) {
       currentQi = meta.qi; picked = -1; predicted = -1;
@@ -306,6 +339,7 @@ function watch() {
 
     if (meta.state === "consult") {
       const q = (await room.child("question").once("value")).val();
+      if (stale()) return;
       $("consultQ").textContent = q ? q.text : "";
       show("consultCard");
       startTimer(meta.endsAt || 0, "consultTimer", true);
@@ -314,16 +348,17 @@ function watch() {
 
     if (meta.state === "reading" || meta.state === "question") {
       const q = (await room.child("question").once("value")).val();
-      if (!q) return;
+      if (!q || stale()) return;
       role = (myAlive && (mode !== "rep" || myRep)) ? "ans" : "pred";
       $("qTextP").textContent = q.text;
       $("roleBadge").className = "badge" + (role === "pred" ? " predB" : "");
-      $("roleBadge").textContent = role === "pred" ? (myAlive ? "📣 代表者対決：予想で参加" : "🔮 予想投票で参加中") : "✋ 回答者";
+      $("roleBadge").textContent = role === "pred" ? "予想で参加" : "✋ 回答者";
+      setRoleView(role === "pred");
       if (meta.state === "reading") {
         clearInterval(timerInt);
         $("timerView").textContent = "";
         $("timerView").classList.remove("danger");
-        renderButtons(q, role, false, -1);
+        renderButtons(q, role, "wait", -1);
         $("pickedMsg").textContent = role === "pred" ? "問題を読み上げ中…合図で予想スタート！" : "問題を読み上げ中…合図で回答スタート！";
         show("ansCard");
         return;
@@ -332,10 +367,12 @@ function watch() {
       // 再接続したときのために、すでに送った回答・予想を読み込む
       const path = role === "pred" ? "predictions" : "answers";
       const prev = (await room.child(`${path}/${meta.qi}/${myId}`).once("value")).val();
+      if (stale()) return;
       if (prev) { if (role === "pred") predicted = prev.choice; else picked = prev.choice; }
       const chosen = role === "pred" ? predicted : picked;
       const open = now() < curEndsAt;
-      renderButtons(q, role, open, chosen);
+      if (open && chosen < 0 && navigator.vibrate) navigator.vibrate(120);
+      renderButtons(q, role, open ? "open" : "closed", chosen);
       if (chosen >= 0) $("pickedMsg").textContent = `${LABELS[chosen]} で${role === "pred" ? "予想" : "回答"}したよ。結果を待とう`;
       else if (!open) $("pickedMsg").textContent = "締切！ 結果を待とう";
       else $("pickedMsg").textContent = role === "pred"

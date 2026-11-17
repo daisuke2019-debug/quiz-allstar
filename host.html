@@ -217,6 +217,7 @@
 
     <div id="prepArea">
       <div class="periodResult hidden" id="periodResult"></div>
+      <div class="warn hidden" id="allOutWarn" style="text-align:center;font-size:18px">全員が脱落しています。このまま出題すると、全員が「予想投票」になります。<br>「このピリオドを終える」を押すと、全員が復活します。</div>
       <div class="row" style="justify-content:center">
         <span>この問題の形式：
           <select id="modeSel">
@@ -646,6 +647,13 @@ function showPrep() {
   $("prepArea").classList.remove("hidden");
   $("askBtn").disabled = qi + 1 >= questions.length;
   $("periodBtn").classList.toggle("hidden", !periodDirty);
+  renderAllOutWarn();
+}
+// 全員が脱落しているときは、出題前に知らせる
+function renderAllOutWarn() {
+  const list = Object.values(playersCache);
+  const allOut = list.length > 0 && list.every(p => p.alive === false);
+  $("allOutWarn").classList.toggle("hidden", !allOut);
 }
 
 function eligible(p) {
@@ -864,7 +872,9 @@ $("revealBtn").onclick = async () => {
     }
   }
   const rate = eligibleList.length ? Math.round(correctN * 100 / eligibleList.length) : 0;
-  $("rateView").innerHTML = `正解は <b>${LABELS[q.correct]}</b>　正解率 <b>${rate}%</b><br><span class="note">正解 ${correctN}人 ／ 回答する人 ${eligibleList.length}人</span>`;
+  $("rateView").innerHTML = eligibleList.length
+    ? `正解は <b>${LABELS[q.correct]}</b>　正解率 <b>${rate}%</b><br><span class="note">正解 ${correctN}人 ／ 回答する人 ${eligibleList.length}人</span>`
+    : `正解は <b>${LABELS[q.correct]}</b><br><span class="note">回答できる人がいません（全員が脱落中のため、予想投票だけ集計しました）</span>`;
   $("survView").innerHTML = curMode === "survival" ? `生き残り <b>${correctN}</b> 人` + (newlyOut.length ? `（脱落 ${newlyOut.length}人）` : "") : "";
   $("predView").innerHTML = predN ? `🔮 予想投票：的中 <b>${predHit}</b>人 ／ ${predN}人` : "";
   $("top10").innerHTML = speed.length
