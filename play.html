@@ -298,7 +298,7 @@ async function pick(j) {
     if (k === j) b.classList.add("picked"); else b.classList.add("dim");
   });
   document.getElementById("pickedMsg").textContent = LABELS[j] + " で回答したよ。結果を待とう";
-  await db.ref(`rooms/${pin}/answers/${currentQi}/${myId}`).set({ choice: j });
+  await db.ref(`rooms/${pin}/answers/${currentQi}/${myId}`).set({ choice: j, t: Date.now() });
 }
 
 document.querySelectorAll("#stampBar button").forEach(b => b.onclick = async () => {

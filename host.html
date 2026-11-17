@@ -132,6 +132,12 @@
   .up { color: #3ecf7f; font-weight: bold; }
   .down { color: #ff5f7a; font-weight: bold; }
   tr.firstRow td { background: rgba(255,200,0,.13); color: #ffe97a; font-weight: bold; }
+
+  /* === サウンドパネル（2026-11-17） === */
+  #soundDock { position: fixed; right: 14px; bottom: 14px; z-index: 70; display: flex; gap: 8px; }
+  .soundRow { display: flex; gap: 8px; align-items: center; margin: 7px 0; flex-wrap: wrap; }
+  .soundRow .label { min-width: 210px; color: #ffd94d; font-weight: bold; font-size: 15px; }
+  .soundRow .sname { color: #bdbdf0; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -139,6 +145,7 @@
 <div class="beams"><i class="b1"></i><i class="b2"></i></div>
 <div class="twinkles"></div>
 <div id="confettiLayer"></div>
+<div id="soundDock"><button class="sub2" id="entranceBtn">▶ 入場BGM</button><button class="sub2" id="soundStopBtn">🔇 音を止める</button></div>
 <div class="wrap">
   <h1 class="logo"><span class="star">★</span>クイズ・オールスター<span class="star">★</span></h1>
   <p class="sub">司 会 画 面</p>
@@ -172,6 +179,9 @@
       </span>
       <span>全員正解ボーナス： +<select id="bonusSel"><option>1</option><option>2</option><option selected>3</option><option>5</option></select> 点</span>
     </div>
+    <h2 style="margin-top:16px">♪ サウンド（このPC内の音源ファイルを選ぶ）</h2>
+    <div id="soundPanel"></div>
+    <p style="color:#bdbdf0;font-size:13px">音源はこのPCの中だけに保存されます（ネットには上がりません）。相談・出題・正解発表・優勝に合わせて自動で鳴ります。入場BGMは右下のボタンで再生／停止します。</p>
     <h2 style="margin-top:16px">③ 部屋を作る</h2>
     <div class="row"><button id="createRoom">部屋を作って参加者を待つ</button></div>
   </div>
@@ -222,6 +232,7 @@
     <div id="revealArea" class="hidden">
       <div class="survivors" id="survView"></div>
       <div class="gainlist" id="gainList"></div>
+      <div class="gainlist" id="speedView"></div>
     </div>
 
     <div class="row" style="justify-content:center;margin-top:16px">
@@ -378,6 +389,7 @@ document.getElementById("importFile").onchange = e => {
 };
 
 let pin = null, qi = -1, timerInt = null, playersCache = {}, teamState = {}, curMode = "points";
+let curQStart = 0, fastestCount = {}, lastSpeedHtml = "";
 const roomRef = () => db.ref("rooms/" + pin);
 const teamName = tid => (teams[+String(tid).replace("t","")] || tid);
 
@@ -390,6 +402,91 @@ function beep(freq, dur) {
     o.start(); o.stop(ctx.currentTime + dur);
   } catch(e) {}
 }
+
+
+// ===== サウンド（このPC内のファイルだけを使う・IndexedDBに保存） =====
+const SOUNDS = [
+  { key: "entrance", label: "入場BGM" },
+  { key: "consult", label: "相談タイム（LET'S THINK!）" },
+  { key: "think", label: "回答時間（シンキング音）" },
+  { key: "correct", label: "正解発表（ピンポン）" },
+  { key: "fanfare", label: "優勝（ファンファーレ）" }
+];
+const soundUrls = {}, soundAudio = {};
+let idb = null, entranceOn = false;
+function openIDB() {
+  return new Promise(res => {
+    try {
+      const rq = indexedDB.open("quiz-sounds", 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore("files");
+      rq.onsuccess = () => { idb = rq.result; res(); };
+      rq.onerror = () => res();
+    } catch(e) { res(); }
+  });
+}
+function idbPut(key, blob) {
+  if (!idb) return;
+  try { idb.transaction("files", "readwrite").objectStore("files").put(blob, key); } catch(e) {}
+}
+function idbGetAll() {
+  return new Promise(res => {
+    if (!idb) return res({});
+    const out = {};
+    try {
+      const rq = idb.transaction("files", "readonly").objectStore("files").openCursor();
+      rq.onsuccess = () => { const c = rq.result; if (c) { out[c.key] = c.value; c.continue(); } else res(out); };
+      rq.onerror = () => res(out);
+    } catch(e) { res(out); }
+  });
+}
+function setSound(key, blob, name) {
+  if (soundUrls[key]) URL.revokeObjectURL(soundUrls[key]);
+  soundUrls[key] = URL.createObjectURL(blob);
+  const a = new Audio(soundUrls[key]);
+  a.preload = "auto";
+  soundAudio[key] = a;
+  const el = document.querySelector(`[data-sname="${key}"]`);
+  if (el) el.textContent = name || "設定済み";
+}
+function stopSound(key) {
+  const a = soundAudio[key];
+  if (a) { try { a.pause(); a.currentTime = 0; } catch(e) {} }
+}
+function playSound(key, loop) {
+  const a = soundAudio[key];
+  if (!a) return;
+  try { stopSound(key); a.loop = !!loop; a.currentTime = 0; a.play().catch(() => {}); } catch(e) {}
+}
+function stopAllSounds() { SOUNDS.forEach(s => stopSound(s.key)); }
+function renderSoundPanel() {
+  const box = document.getElementById("soundPanel");
+  if (!box) return;
+  box.innerHTML = "";
+  SOUNDS.forEach(s => {
+    const d = document.createElement("div");
+    d.className = "soundRow";
+    d.innerHTML = `<span class="label">${s.label}</span>
+      <button class="sub2" data-spick="${s.key}">ファイルを選ぶ</button>
+      <button class="sub2" data-splay="${s.key}">▶ 試聴</button>
+      <span class="sname" data-sname="${s.key}">未設定</span>
+      <input type="file" accept="audio/*" class="hidden" data-sfile="${s.key}">`;
+    box.appendChild(d);
+  });
+  box.querySelectorAll("[data-spick]").forEach(b => b.onclick = () => box.querySelector(`[data-sfile="${b.dataset.spick}"]`).click());
+  box.querySelectorAll("[data-sfile]").forEach(inp => inp.onchange = () => {
+    const f = inp.files[0];
+    if (!f) return;
+    setSound(inp.dataset.sfile, f, f.name);
+    idbPut(inp.dataset.sfile, f);
+  });
+  box.querySelectorAll("[data-splay]").forEach(b => b.onclick = () => { stopAllSounds(); playSound(b.dataset.splay, false); });
+}
+(async () => { renderSoundPanel(); await openIDB(); const all = await idbGetAll(); Object.entries(all).forEach(([k, blob]) => setSound(k, blob, "保存済み")); })();
+document.getElementById("soundStopBtn").onclick = () => { stopAllSounds(); entranceOn = false; document.getElementById("entranceBtn").textContent = "▶ 入場BGM"; };
+document.getElementById("entranceBtn").onclick = () => {
+  if (entranceOn) { stopSound("entrance"); entranceOn = false; document.getElementById("entranceBtn").textContent = "▶ 入場BGM"; }
+  else { playSound("entrance", true); entranceOn = true; document.getElementById("entranceBtn").textContent = "■ 入場BGMを止める"; }
+};
 
 document.getElementById("createRoom").onclick = async () => {
   if (!db) { alert("先にFirebase設定を貼ってください"); return; }
@@ -470,6 +567,7 @@ function renderStandings() {
 
 document.getElementById("startGame").onclick = () => {
   if (Object.keys(playersCache).length === 0) { alert("参加者がまだいません"); return; }
+  stopSound("entrance"); entranceOn = false; document.getElementById("entranceBtn").textContent = "▶ 入場BGM";
   document.getElementById("lobbyCard").classList.add("hidden");
   document.getElementById("stageCard").classList.remove("hidden");
   qi = -1;
@@ -501,6 +599,7 @@ document.getElementById("askBtn").onclick = async () => {
     await roomRef().child("meta").set({ state: "consult", qi, endsAt, mode: curMode });
     await roomRef().child("question").set({ text: q.text, choices: q.choices });
     document.getElementById("consultArea").classList.remove("hidden");
+    playSound("consult");
     document.getElementById("questionArea").classList.add("hidden");
     document.getElementById("consultDoneBtn").classList.add("hidden");
     clearInterval(timerInt);
@@ -509,7 +608,7 @@ document.getElementById("askBtn").onclick = async () => {
       const el = document.getElementById("consultTimer");
       el.textContent = Math.ceil(left / 1000);
       el.classList.toggle("danger", left <= 3000 && left > 0);
-      if (left <= 0) { clearInterval(timerInt); beep(660, 0.3); document.getElementById("consultDoneBtn").classList.remove("hidden"); }
+      if (left <= 0) { clearInterval(timerInt); stopSound("consult"); beep(660, 0.3); document.getElementById("consultDoneBtn").classList.remove("hidden"); }
     }, 100);
   } else {
     beginAnswer();
@@ -517,6 +616,7 @@ document.getElementById("askBtn").onclick = async () => {
 };
 document.getElementById("consultDoneBtn").onclick = () => {
   document.getElementById("consultArea").classList.add("hidden");
+  stopSound("consult");
   beginAnswer();
 };
 
@@ -524,6 +624,8 @@ async function beginAnswer() {
   const q = questions[qi];
   const secs = +document.getElementById("secSel").value;
   const endsAt = Date.now() + secs * 1000;
+  curQStart = endsAt - secs * 1000;
+  playSound("think");
   await roomRef().child("meta").set({ state: "question", qi, endsAt, mode: curMode });
   await roomRef().child("question").set({ text: q.text, choices: q.choices });
   document.getElementById("questionArea").classList.remove("hidden");
@@ -546,6 +648,7 @@ async function beginAnswer() {
     if (left <= 3000 && left > 0 && Math.ceil(left/1000) !== timerInt._last) { timerInt._last = Math.ceil(left/1000); beep(880, 0.09); }
     if (left <= 0) {
       clearInterval(timerInt);
+      stopSound("think");
       ansRef.off("value", ansListener);
       beep(440, 0.35);
       document.getElementById("revealBtn").classList.remove("hidden");
@@ -555,6 +658,7 @@ async function beginAnswer() {
 
 document.getElementById("revealBtn").onclick = async () => {
   document.getElementById("revealBtn").classList.add("hidden");
+  stopSound("think"); stopSound("consult");
   // 正解発表の「ため」演出：約1.8秒パネルが明滅してから発表する
   const panels = [0,1,2,3].map(j => document.getElementById("ch" + j)).filter(Boolean);
   panels.forEach(p => p.classList.add("suspense"));
@@ -632,6 +736,21 @@ document.getElementById("revealBtn").onclick = async () => {
       setTimeout(() => s.remove(), 950);
     }
   }
+  // 最速の正解者・いちばんゆっくりな回答者（回答時刻から計算）
+  let fastest = null, slowest = null;
+  Object.entries(answers).forEach(([pid, a]) => {
+    if (!a || typeof a.t !== "number") return;
+    const p = playersCache[pid];
+    if (!p) return;
+    const sec = Math.max(0, (a.t - curQStart) / 1000);
+    const rec = { pid, name: p.name, sec, correct: a.choice === q.correct };
+    if (!slowest || sec > slowest.sec) slowest = rec;
+    if (rec.correct && (!fastest || sec < fastest.sec)) fastest = rec;
+  });
+  if (fastest) fastestCount[fastest.pid] = (fastestCount[fastest.pid] || 0) + 1;
+  lastSpeedHtml =
+    (fastest ? `⚡ 最速の正解：<b>${fastest.name}さん（${fastest.sec.toFixed(1)}秒）</b>` : "正解者なし") +
+    (slowest && (!fastest || slowest.pid !== fastest.pid) ? `<br>🐢 いちばんゆっくり：${slowest.name}さん（${slowest.sec.toFixed(1)}秒）` : "");
   document.getElementById("revealArea").classList.remove("hidden");
   document.getElementById("survView").innerHTML = curMode === "survival"
     ? `生き残り <b>${survivorsTotal}</b> 人`
@@ -640,6 +759,8 @@ document.getElementById("revealBtn").onclick = async () => {
     const g = gains["t" + i];
     return `${t}：<b>+${g.pts}点</b>（正解${g.correct}人${g.bonus ? "・全員正解ボーナス！" : ""}）`;
   }).join("<br>");
+  document.getElementById("speedView").innerHTML = lastSpeedHtml;
+  playSound("correct");
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
   if (qi + 1 < questions.length) document.getElementById("nextBtn").classList.remove("hidden");
   else document.getElementById("finishBtn").classList.remove("hidden");
@@ -656,9 +777,12 @@ async function finishGame() {
   const bonusTop = [...ranked].sort((a,b) => b.bonus - a.bonus)[0];
   const players = Object.values(playersCache);
   const mvp = [...players].sort((a,b) => (b.score || 0) - (a.score || 0))[0];
+  const speedKing = Object.entries(fastestCount).sort((a,b) => b[1] - a[1])[0];
+  const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
   document.getElementById("awardList").innerHTML =
     `団結賞（全員正解 ${bonusTop ? bonusTop.bonus : 0}回）：<b>${bonusTop ? bonusTop.name : "—"}</b><br>` +
-    `個人MVP（正解 ${mvp ? (mvp.score || 0) : 0}問）：<b>${mvp ? mvp.name : "—"}</b>`;
+    `個人MVP（正解 ${mvp ? (mvp.score || 0) : 0}問）：<b>${mvp ? mvp.name : "—"}</b>` +
+    (kingPlayer ? `<br>最速王（最速の正解 ${speedKing[1]}回）：<b>${kingPlayer.name}</b>` : "");
   document.getElementById("finalTeamBody").innerHTML = ranked.map((t, i) =>
     `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${t.name}</td><td>${t.points}</td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
   const arr = Object.entries(playersCache).map(([id,p]) => ({ id, ...p }));
@@ -672,7 +796,9 @@ async function finishGame() {
     `<tr><td>${i+1}</td><td>${p.name}</td><td>${teamName(p.team)}</td><td>${p.alive === false ? `第${(p.outAt ?? 0)+1}問で脱落` : "最後まで生存！"}</td><td>${p.score || 0}</td></tr>`).join("");
   document.getElementById("stageCard").classList.add("hidden");
   document.getElementById("podiumCard").classList.remove("hidden");
+  stopAllSounds();
   launchConfetti();
+  playSound("fanfare");
 }
 
 function launchConfetti() {
