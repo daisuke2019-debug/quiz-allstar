@@ -78,6 +78,10 @@
   .sendState { font-size: 17px; margin-top: 6px; }
   .sendState.ok { color: #8ef0c1; }
   .sendState.slow { color: #ffb3c0; font-weight: bold; }
+  .notice { margin: 14px 0 4px; padding: 12px 14px; border-radius: 12px; border: 1px solid #ffd94d; background: rgba(90,70,0,.35); font-size: 16px; line-height: 1.8; }
+  .notice b { color: #ffe27a; }
+  .notice .nt { text-align: center; font-weight: bold; color: #ffe27a; margin-bottom: 4px; }
+  .dblBadge { display: inline-block; background: linear-gradient(90deg, #ff5f7a, #ffb000); color: #fff; font-weight: bold; border-radius: 999px; padding: 4px 16px; font-size: 17px; margin-bottom: 6px; }
   .link { background: none; border: none; color: var(--muted); text-decoration: underline; font-size: 14px; margin-top: 10px; width: 100%; cursor: pointer; font-family: inherit; }
 </style>
 </head>
@@ -104,7 +108,8 @@
     <p class="msg big" id="waitName"></p>
     <p class="msg" id="waitTeam"></p>
     <p class="msg" id="waitMsg">参加できたよ！<br>クイズ開始まで待っててね</p>
-    <p class="msg" style="font-size:14px;color:var(--muted);margin-top:8px">画面が消えても大丈夫。もう一度このページを開けば続きから参加できます</p>
+    <div class="notice" id="noticeBox"></div>
+    <p class="msg" style="font-size:14px;color:var(--muted);margin-top:8px">もし画面が消えても、もう一度このページを開けば続きから参加できます</p>
     <p class="teampoints" id="waitPoints"></p>
   </div>
 
@@ -119,6 +124,7 @@
   <!-- 回答・予想 -->
   <div class="card hidden" id="ansCard">
     <div class="predBanner hidden" id="predBanner"></div>
+    <div style="text-align:center"><span class="dblBadge hidden" id="dblBadge">🔥 この問題はチーム得点2倍！</span></div>
     <div style="text-align:center"><span class="badge" id="roleBadge"></span></div>
     <div class="timer" id="timerView"></div>
     <p class="msg" id="qTextP" style="margin-bottom:12px"></p>
@@ -369,6 +375,15 @@ function watch() {
   });
   // 問題文を常に受け取っておく（出題の瞬間にすぐ表示できるように）
   listen(room.child("question"), s => { qCache = s.val(); });
+  // 待機画面の注意事項（司会画面で「Wi-Fiオフ」か「会場Wi-Fi」を切り替えられる）
+  listen(room.child("notice"), s => {
+    const wifi = s.val() === "wifi";
+    $("noticeBox").innerHTML = `<div class="nt">⚠️ 始まる前に確認してね</div>` +
+      (wifi ? "📶 <b>会場のWi-Fiにつなぐ</b>（運営の案内のとおり）<br>" : "📶 <b>Wi-Fiはオフ</b>（スマホの回線を使う）<br>") +
+      "🔋 <b>省電力モード（低電力モード）はオフ</b><br>" +
+      "📱 <b>このページを開いたまま</b>（画面は自動で消えません）<br>" +
+      "✅ 右上が <b>🟢 接続中</b> ならOK！";
+  });
   clearInterval(hbInt);
   hbInt = setInterval(heartbeat, 10000);
   listen(room.child("players/" + myId), s => {
@@ -451,6 +466,7 @@ function watch() {
       $("roleBadge").className = "badge" + (role === "pred" ? " predB" : "");
       $("roleBadge").textContent = role === "pred" ? "予想で参加" : "✋ 回答者";
       setRoleView(role === "pred");
+      $("dblBadge").classList.toggle("hidden", !meta.dbl);
       if (meta.state === "reading") {
         readyQi = meta.qi;
         clearInterval(timerInt);
@@ -524,6 +540,15 @@ function watch() {
       $("resultMsg").classList.toggle("win", !!me);
       $("resultMsg").textContent = me ? "🏆 ピリオド優勝！" : `ピリオド${meta.period} 終了！`;
       $("resultSub").textContent = (meta.winner ? `優勝：${meta.winner}さん。` : "") + "全員復活！次のピリオドもがんばろう";
+      show("resultCard");
+      return;
+    }
+
+    if (meta.state === "awards") {
+      clearInterval(timerInt);
+      $("resultMsg").classList.remove("win");
+      $("resultMsg").textContent = "🏆 結果発表中！";
+      $("resultSub").textContent = "大画面に注目！";
       show("resultCard");
       return;
     }

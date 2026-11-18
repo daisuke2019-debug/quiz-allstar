@@ -160,6 +160,20 @@
   .pingSum { text-align: center; font-size: 30px; margin: 6px 0; }
   .pingSum b { font-size: 54px; color: #8ef0c1; }
   .pingNg { text-align: center; font-size: 20px; color: #ffb3c0; }
+  /* 次に押すボタン */
+  button.next { outline: 3px solid #fff; outline-offset: 3px; animation: nextGlow .9s ease-in-out infinite alternate; }
+  @keyframes nextGlow { from { box-shadow: 0 0 8px rgba(79,210,255,.5); } to { box-shadow: 0 0 36px 10px rgba(79,210,255,.95); } }
+  #nextHint { position: fixed; left: 14px; bottom: 62px; z-index: 75; background: rgba(2,10,36,.94); border: 1px solid var(--cyan); border-radius: 999px; padding: 7px 18px; font-size: 17px; color: var(--ice); box-shadow: 0 0 16px rgba(79,210,255,.4); }
+  #nextHint b { color: var(--cyan); }
+  /* 得点2倍 */
+  .dblBadge { display: inline-block; background: linear-gradient(90deg, #ff5f7a, #ffb000); color: #fff; font-weight: bold; border-radius: 999px; padding: 6px 22px; font-size: 26px; animation: pulse .6s infinite alternate; }
+  /* 順番に発表 */
+  .awardStage { min-height: 240px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; text-align: center; }
+  .awardStage .alabel { font-size: 28px; color: var(--ice); }
+  .awardStage .aname { font-size: 58px; font-weight: bold; color: #ffe27a; text-shadow: 0 0 24px rgba(255,226,122,.6); line-height: 1.25; }
+  .awardStage .asub { font-size: 22px; color: var(--muted); line-height: 1.7; }
+  .awardStage .asub b { color: #fff; }
+  .awardStage .drum { font-size: 44px; color: var(--cyan); animation: pulse .25s infinite alternate; }
   .monitor.proxyOn .chip { cursor: pointer; }
   .monitor.proxyOn .chip:hover { outline: 2px solid #fff; }
   #proxyPanel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 95; width: min(560px, 92vw); background: #06123a; border: 2px solid var(--cyan); border-radius: 18px; padding: 20px; box-shadow: 0 0 60px rgba(0,0,0,.8); }
@@ -173,6 +187,7 @@
 <div id="stampLayer"></div>
 <div id="confettiLayer"></div>
 <div id="ticker" class="hidden"></div>
+<div id="nextHint" class="hidden"></div>
 <div id="proxyPanel" class="hidden">
   <h3 id="proxyTitle"></h3>
   <div class="pbtns">
@@ -240,6 +255,8 @@
       <select id="lobbyClick"><option value="rep">決勝用の「代表（★）」を付け外し</option><option value="remove">参加者を外す（二重登録など）</option></select>
       　点線の名前＝通信が切れている人</p>
     <p class="note" style="text-align:center">🟢 接続中　🟡 反応が遅い（画面が消えているかも）　🔴 通信が切れている</p>
+    <p style="text-align:center;font-size:15px;color:var(--ice);margin-top:6px">スマホの待機画面に出す案内：
+      <select id="noticeSel"><option value="cell">Wi-Fiをオフにして、スマホの回線を使う</option><option value="wifi">会場のWi-Fiにつなぐ</option></select></p>
     <div id="lobbyTeams"></div>
     <div class="row" style="justify-content:center;margin-top:18px">
       <button class="sub2 pingStart">📶 接続チェックをする</button>
@@ -255,6 +272,7 @@
       <span class="alive">残り <b id="survNum">0</b> ／ <span id="survTotal">0</span>人</span>
     </div>
     <p style="text-align:center;color:var(--muted)" id="qNum"></p>
+    <div id="dblView" class="hidden" style="text-align:center;margin:4px 0 8px"><span class="dblBadge">🔥 この問題はチーム得点2倍！</span></div>
 
     <div id="prepArea">
       <div class="periodResult hidden" id="periodResult"></div>
@@ -268,6 +286,7 @@
             <option value="rep">代表者対決（正解で+5点）</option>
           </select>
         </span>
+        <label style="font-size:17px;cursor:pointer"><input type="checkbox" id="dblChk" style="width:20px;height:20px;vertical-align:middle"> 🔥 チーム得点2倍（決勝など）</label>
         <button id="askBtn">出題する！</button>
       </div>
       <div class="row" style="justify-content:center">
@@ -320,12 +339,16 @@
   <!-- 結果 -->
   <div class="card glow hidden podium" id="podiumCard">
     <h2>🏆 結果発表</h2>
-    <div class="champ" id="champView"></div>
-    <div class="gainlist" id="awardList"></div>
-    <table><thead><tr><th>順位</th><th>チーム</th><th>点数</th><th>全員正解</th><th>残り人数</th></tr></thead><tbody id="finalTeamBody"></tbody></table>
-    <h2 style="margin-top:16px">個人ランキング（最後のピリオド）</h2>
-    <table><thead><tr><th>順位</th><th>名前</th><th>チーム</th><th>結果</th><th>正解数</th><th>観客P</th></tr></thead><tbody id="rankBody"></tbody></table>
-    <div class="row" style="justify-content:center;margin-top:16px">
+    <div class="awardStage" id="awardStage"></div>
+    <div class="row" style="justify-content:center"><button id="awardNextBtn">発表スタート！</button></div>
+    <div id="podiumFinal" class="hidden">
+      <div class="champ" id="champView"></div>
+      <div class="gainlist" id="awardList"></div>
+      <table><thead><tr><th>順位</th><th>チーム</th><th>点数</th><th>全員正解</th><th>残り人数</th></tr></thead><tbody id="finalTeamBody"></tbody></table>
+      <h2 style="margin-top:16px">個人ランキング（最後のピリオド）</h2>
+      <table><thead><tr><th>順位</th><th>名前</th><th>チーム</th><th>結果</th><th>正解数</th><th>観客P</th></tr></thead><tbody id="rankBody"></tbody></table>
+    </div>
+    <div class="row hidden" id="resetRow" style="justify-content:center;margin-top:30px">
       <button class="sub2" id="resetBtn">部屋を閉じて最初から（参加者のデータを削除）</button>
     </div>
   </div>
@@ -368,6 +391,16 @@ const now = () => Date.now() + serverOffset;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = id => document.getElementById(id);
+// 今押すべきボタンを1つだけ光らせ、左上に「次は：○○」を出す
+function setNext(target, hint) {
+  document.querySelectorAll("button.next").forEach(b => b.classList.remove("next"));
+  const el = typeof target === "string" ? $(target) : target;
+  if (el) el.classList.add("next");
+  const h = $("nextHint");
+  if (!hint) { h.classList.add("hidden"); return; }
+  h.innerHTML = "▶ 次は：<b>" + hint + "</b>";
+  h.classList.remove("hidden");
+}
 
 const DEFAULT_TEAMS = ["チームA","チームB","チームC","チームD","チームE","チームF","チームG"];
 const DEFAULT_QS = [
@@ -471,7 +504,9 @@ $("importFile").onchange = e => {
 
 let pin = null, qi = -1, timerInt = null, playersCache = {}, teamState = {}, curMode = "survival";
 let curQStart = 0, curEndsAt = 0, curSecs = 15, fastestCount = {};
-let period = 1, periodWinners = [], periodDirty = false, liveOff = [];
+let period = 1, periodWinners = [], periodDirty = false, liveOff = [], curDbl = false;
+// スマホの待機画面の案内（Wi-Fiオフ／会場Wi-Fi）はいつでも切り替えられる
+$("noticeSel").onchange = () => { if (pin) roomRef().child("notice").set($("noticeSel").value); };
 const roomRef = () => db.ref("rooms/" + pin);
 const teamName = tid => (teams[+String(tid).replace("t","")] || tid);
 
@@ -581,10 +616,11 @@ $("createRoom").onclick = async () => {
   pin = String(Math.floor(1000 + Math.random() * 9000));
   const teamsObj = {}, stateObj = {};
   teams.forEach((t, i) => { teamsObj["t" + i] = { name: t }; stateObj["t" + i] = { points: 0, bonus: 0 }; });
-  await roomRef().set({ meta: { state: "lobby", qi: -1, period: 1 }, teams: teamsObj, teamState: stateObj, createdAt: Date.now() });
+  await roomRef().set({ meta: { state: "lobby", qi: -1, period: 1 }, teams: teamsObj, teamState: stateObj, notice: $("noticeSel").value, createdAt: Date.now() });
   $("pinView").textContent = pin;
   $("setupCard").classList.add("hidden");
   $("lobbyCard").classList.remove("hidden");
+  setNext(document.querySelector("#lobbyCard .pingStart"), "全員そろったら「📶 接続チェック」");
   roomRef().child("players").on("value", snap => {
     playersCache = snap.val() || {};
     renderLobby(); renderStandings(); renderSurv(); renderMonitor();
@@ -710,6 +746,7 @@ async function startPing() {
   pingRef = roomRef().child("pings/" + pingNonce);
   pingFn = s => { pingResp = s.val() || {}; renderPing(); };
   pingRef.on("value", pingFn);
+  setNext("pingEndBtn", "全員の応答を確かめたら「チェックを終える」");
   $("pingCard").classList.remove("hidden");
   renderPing();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -728,7 +765,8 @@ async function endPing() {
   pingRef = null; pingFn = null; pingNonce = ""; pingResp = {};
   await roomRef().child("meta").set({ state: "lobby", qi, period });
   $("pingCard").classList.add("hidden");
-  if (!$("lobbyCard").classList.contains("hidden")) renderLobby();
+  if (!$("lobbyCard").classList.contains("hidden")) { renderLobby(); setNext("startGame", "クイズ開始！"); }
+  else if (!$("prepArea").classList.contains("hidden")) setPrepNext();
   renderMonitor();
 }
 document.querySelectorAll(".pingStart").forEach(b => b.onclick = startPing);
@@ -813,6 +851,13 @@ function showPrep() {
   $("askBtn").disabled = qi + 1 >= questions.length;
   $("periodBtn").classList.toggle("hidden", !periodDirty);
   renderAllOutWarn();
+  setPrepNext();
+}
+function setPrepNext() {
+  const list = Object.values(playersCache);
+  if (list.length && list.every(p => p.alive === false)) setNext("periodBtn", "全員脱落中 →「このピリオドを終える」で全員復活");
+  else if (qi + 1 >= questions.length) setNext("earlyFinishBtn", "問題はすべて終了 →「結果発表へ進む」");
+  else setNext("askBtn", "形式を選んで「出題する！」");
 }
 // 全員が脱落しているときは、出題前に知らせる
 function renderAllOutWarn() {
@@ -837,6 +882,8 @@ $("askBtn").onclick = async () => {
   if (pingNonce) { if (pingRef && pingFn) pingRef.off("value", pingFn); pingRef = null; pingFn = null; pingNonce = ""; pingResp = {}; $("pingCard").classList.add("hidden"); }
   qi++;
   curMode = $("modeSel").value;
+  curDbl = $("dblChk").checked;
+  $("dblView").classList.toggle("hidden", !curDbl);
   curAnsSet = {}; curPredSet = {}; answerClosed = false; answerStarted = false; revealed = false;
   renderMonitor();
   const q = questions[qi];
@@ -844,14 +891,15 @@ $("askBtn").onclick = async () => {
   $("revealArea").classList.add("hidden");
   $("periodResult").classList.add("hidden");
   showTicker("");
-  $("qNum").textContent = `第${qi+1}問 ／ 全${questions.length}問（${ {points:"通常",consult:"相談タイムつき",survival:"サバイバル",rep:"代表者対決"}[curMode] }）`;
+  $("qNum").textContent = `第${qi+1}問 ／ 全${questions.length}問（${ {points:"通常",consult:"相談タイムつき",survival:"サバイバル",rep:"代表者対決"}[curMode] }）` + (curDbl ? "　🔥チーム得点2倍" : "");
   // 問題文を先に書いてから状態を変える（スマホが古い問題を読まないように）
   await roomRef().child("question").set({ text: q.text, choices: q.choices, qi });
   clearInterval(timerInt);
   if (curMode === "consult") {
     const secs = +$("consultSel").value;
     const endsAt = now() + secs * 1000;
-    await roomRef().child("meta").set({ state: "consult", qi, endsAt, mode: curMode, period });
+    await roomRef().child("meta").set({ state: "consult", qi, endsAt, mode: curMode, period, dbl: curDbl });
+    setNext(null, "相談タイム中…（終わると「回答スタート！」が出ます）");
     $("consultArea").classList.remove("hidden");
     $("questionArea").classList.add("hidden");
     $("consultDoneBtn").classList.add("hidden");
@@ -861,17 +909,18 @@ $("askBtn").onclick = async () => {
       const el = $("consultTimer");
       el.textContent = Math.ceil(left / 1000);
       el.classList.toggle("danger", left <= 5000 && left > 0);
-      if (left <= 0) { clearInterval(timerInt); stopSound("consult"); beep(660, 0.3); $("consultDoneBtn").classList.remove("hidden"); }
+      if (left <= 0) { clearInterval(timerInt); stopSound("consult"); beep(660, 0.3); $("consultDoneBtn").classList.remove("hidden"); setNext("consultDoneBtn", "回答スタート！"); }
     }, 100);
   } else {
     // 読み上げ中：問題と選択肢を見せるが、まだ答えられない
-    await roomRef().child("meta").set({ state: "reading", qi, mode: curMode, period });
+    await roomRef().child("meta").set({ state: "reading", qi, mode: curMode, period, dbl: curDbl });
     renderChoices(q);
     $("questionArea").classList.remove("hidden");
     $("readingMsg").classList.remove("hidden");
     $("ringWrap").classList.add("hidden");
     $("ansCount").textContent = "";
     $("startAnsBtn").classList.remove("hidden");
+    setNext("startAnsBtn", "問題を読み上げたら「回答スタート！」");
   }
 };
 $("startAnsBtn").onclick = () => { $("startAnsBtn").classList.add("hidden"); beginAnswer(); };
@@ -889,8 +938,9 @@ async function beginAnswer() {
   $("ringWrap").classList.remove("hidden");
   $("revealBtn").classList.add("hidden");
   playSound("think");
-  await roomRef().child("meta").set({ state: "question", qi, startAt: curQStart, endsAt: curEndsAt, mode: curMode, period });
+  await roomRef().child("meta").set({ state: "question", qi, startAt: curQStart, endsAt: curEndsAt, mode: curMode, period, dbl: curDbl });
   answerStarted = true;
+  setNext(null, "回答時間中…（締切後に「正解発表！」が光ります）");
   renderMonitor();
   let nAns = 0, nPred = 0;
   const showCount = () => { $("ansCount").textContent = `回答済み ${nAns} 人` + (nPred ? ` ／ 予想投票 ${nPred} 人` : ""); };
@@ -916,6 +966,7 @@ async function beginAnswer() {
       // 遅れて届く回答のために少し待ってから数え終え、未回答の人を表示する
       setTimeout(() => { liveOff.forEach(f => f()); liveOff = []; answerClosed = true; renderMonitor(); }, GRACE_MS);
       $("revealBtn").classList.remove("hidden");
+      setNext("revealBtn", "正解発表！");
     }
   }, 100);
 }
@@ -941,6 +992,7 @@ $("revealBtn").onclick = async () => {
   $("revealBtn").classList.add("hidden");
   $("proxyPanel").classList.add("hidden");
   revealed = true;
+  setNext(null, "発表中…");
   renderMonitor();
   stopSound("think"); stopSound("consult");
   liveOff.forEach(f => f()); liveOff = [];
@@ -1007,6 +1059,7 @@ $("revealBtn").onclick = async () => {
     const tid = "t" + i, g = gains[tid];
     if (curMode === "rep") {
       g.pts = g.correct > 0 ? 5 : 0;
+      if (curDbl) g.pts *= 2;
     } else {
       g.pts = g.correct;
       const aliveMembers = Object.entries(playersCache).filter(([, p]) => p.team === tid && p.alive !== false);
@@ -1014,6 +1067,7 @@ $("revealBtn").onclick = async () => {
         g.bonus = true; g.pts += bonusPts;
       }
     }
+    if (curDbl && curMode !== "rep") g.pts *= 2;
     const st = teamState[tid] || { points: 0, bonus: 0 };
     updates[`teamState/${tid}/points`] = (st.points || 0) + g.pts;
     if (g.bonus) updates[`teamState/${tid}/bonus`] = (st.bonus || 0) + 1;
@@ -1053,15 +1107,17 @@ $("revealBtn").onclick = async () => {
     ? `<h2 style="text-align:center">⚡ 早く答えた人ランキング</h2><table><tbody>${speed.slice(0, 10).map((s, i) =>
         `<tr><td>${i + 1}位</td><td>${esc(s.name)}</td><td>${esc(teamName(s.team))}</td><td>${s.sec.toFixed(2)}秒</td></tr>`).join("")}</tbody></table>`
     : "正解者なし";
+  // 大画面には、メンバーがいるチームだけを出す
   $("gainList").innerHTML = curMode === "survival" ? "" : teams.map((t, i) => {
+    if (teamMembers("t" + i) === 0) return "";
     const g = gains["t" + i];
-    return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.bonus ? "・全員正解ボーナス！" : ""}）`;
-  }).join("<br>");
+    return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.bonus ? "・全員正解ボーナス！" : ""}${curDbl && g.pts > 0 ? "・🔥2倍" : ""}）`;
+  }).filter(Boolean).join("<br>");
   showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
   playSound("correct");
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
-  if (qi + 1 < questions.length) $("nextBtn").classList.remove("hidden");
-  else $("finishBtn").classList.remove("hidden");
+  if (qi + 1 < questions.length) { $("nextBtn").classList.remove("hidden"); setNext("nextBtn", "次の問題へ"); }
+  else { $("finishBtn").classList.remove("hidden"); setNext("finishBtn", "結果発表へ"); }
 };
 $("nextBtn").onclick = showPrep;
 $("finishBtn").onclick = finishGame;
@@ -1122,8 +1178,10 @@ async function finishGame() {
   const bonusTop = [...ranked].sort((a, b) => b.bonus - a.bonus)[0];
   const speedKing = Object.entries(fastestCount).sort((a, b) => b[1] - a[1])[0];
   const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
-  await roomRef().child("meta").set({ state: "finished", qi, period,
-    champPid: champ ? champ.id : "", champTeam: bestTeam ? bestTeam.tid : "", audKingPid: audKing ? audKing.id : "" });
+  // スマホには「発表中」とだけ出す（優勝者は最後の発表まで伏せる）
+  await roomRef().child("meta").set({ state: "awards", qi, period });
+  finalMeta = { state: "finished", qi, period,
+    champPid: champ ? champ.id : "", champTeam: bestTeam ? bestTeam.tid : "", audKingPid: audKing ? audKing.id : "" };
   $("champView").innerHTML = champ ? `🏆 Galaxyマスター：${esc(champ.name)}さん` : "優勝者なし";
   $("awardList").innerHTML =
     `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? esc(audKing.name) : "—"}</b><br>` +
@@ -1135,12 +1193,66 @@ async function finishGame() {
     `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.points}</td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
   $("rankBody").innerHTML = arr.map((p, i) =>
     `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(teamName(p.team))}</td><td>${p.alive === false ? `第${(p.outAt ?? 0)+1}問で脱落` : "最後まで生存！"}</td><td>${p.score || 0}</td><td>${p.audPts || 0}</td></tr>`).join("");
+  // ===== 順番に発表する（4位以下まとめて → 3位 → 2位 → 1位 → Galaxyマスター） =====
+  const teamsIn = ranked.filter(t => t.members > 0);
+  awardSteps = [];
+  awardSteps.push({ drum: 1200, html: `<div class="alabel">🎖 個人賞</div><div class="asub">` +
+    `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? esc(audKing.name) + "さん" : "該当なし"}</b><br>` +
+    `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) + "さん" : "該当なし"}</b><br>` +
+    `💪 団結賞（全員正解 ${bonusTop ? bonusTop.bonus : 0}回）：<b>${bonusTop && bonusTop.bonus > 0 ? esc(bonusTop.name) : "該当なし"}</b>` +
+    (periodWinners.length ? "<br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("　") : "") + `</div>`,
+    btn: teamsIn.length > 3 ? "チーム順位（4位から）" : "チーム順位の発表へ" });
+  if (teamsIn.length > 3) {
+    awardSteps.push({ drum: 800, html: `<div class="alabel">チーム順位　4位〜</div><div class="asub">` +
+      teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点`).join("<br>") + `</div>`, btn: "第3位の発表" });
+  }
+  const placeLabel = ["🥇 第1位　ベストチーム賞", "🥈 第2位", "🥉 第3位"];
+  for (let i = Math.min(3, teamsIn.length) - 1; i >= 0; i--) {
+    const t = teamsIn[i];
+    awardSteps.push({ drum: i === 0 ? 2200 : 1400, html: `<div class="alabel">${placeLabel[i]}</div><div class="aname">${esc(t.name)}</div><div class="asub">${t.points}点</div>`,
+      btn: i === 0 ? "🏆 Galaxyマスターの発表！" : (i === 1 ? "第1位の発表" : "第2位の発表"), confetti: i === 0 });
+  }
+  awardSteps.push({ drum: 2600, html: `<div class="alabel">🏆 Galaxyマスター（個人優勝）</div><div class="aname">${champ ? esc(champ.name) + "さん" : "該当なし"}</div><div class="asub">最後まで生き残った王者！</div>`, final: true });
+  awardIdx = 0;
+  $("awardStage").innerHTML = `<div class="alabel">おつかれさまでした！ いよいよ結果発表です</div>`;
+  $("awardNextBtn").textContent = "発表スタート！（個人賞から）";
+  $("awardNextBtn").classList.remove("hidden");
+  $("podiumFinal").classList.add("hidden");
+  $("resetRow").classList.add("hidden");
   $("stageCard").classList.add("hidden");
   $("podiumCard").classList.remove("hidden");
   stopAllSounds();
-  launchConfetti();
-  playSound("fanfare");
+  setNext("awardNextBtn", "賞を順番に発表（ボタンを押すたびに1つずつ）");
 }
+let awardSteps = [], awardIdx = 0, finalMeta = null, awardBusy = false;
+$("awardNextBtn").onclick = async () => {
+  if (awardBusy || awardIdx >= awardSteps.length) return;
+  awardBusy = true;
+  const st = awardSteps[awardIdx++];
+  $("awardNextBtn").classList.add("hidden");
+  setNext(null, "発表中…");
+  $("awardStage").innerHTML = `<div class="drum">🥁 ・・・</div>`;
+  const tick = setInterval(() => beep(140, 0.04), 90);
+  await sleep(st.drum);
+  clearInterval(tick);
+  $("awardStage").innerHTML = st.html;
+  beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
+  if (st.confetti) launchConfetti();
+  if (st.final) {
+    launchConfetti();
+    playSound("fanfare");
+    if (finalMeta) await roomRef().child("meta").set(finalMeta);
+    $("podiumFinal").classList.remove("hidden");
+    // 部屋を閉じる（データ削除）ボタンは、すべての発表が終わってから出す
+    $("resetRow").classList.remove("hidden");
+    setNext(null, "結果発表おわり！おつかれさまでした");
+  } else {
+    $("awardNextBtn").textContent = st.btn || "次の発表";
+    $("awardNextBtn").classList.remove("hidden");
+    setNext("awardNextBtn", st.btn || "次の発表");
+  }
+  awardBusy = false;
+};
 
 function launchConfetti() {
   const layer = $("confettiLayer");
