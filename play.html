@@ -195,7 +195,7 @@ if (db) db.ref(".info/serverTimeOffset").on("value", s => { serverOffset = s.val
 const now = () => Date.now() + serverOffset;
 const $ = id => document.getElementById(id);
 
-let pin = null, myId = null, myTeam = null, myTeamName = "", myName = "", myAlive = true, myRep = false, myAud = 0, myExists = false;
+let pin = null, myId = null, myTeam = null, myTeamName = "", myName = "", myAlive = true, myRep = false, myAud = 0, myExists = false, myMiss = 0;
 let localEnd = 0, qCache = null, readyQi = -1, metaSeq = 0, currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
 
 const err = m => $("joinErr").textContent = m;
@@ -413,7 +413,7 @@ function watch() {
       room.child("players/" + myId + "/online").onDisconnect().set(false);
       heartbeat();
     }
-    myAlive = p.alive !== false; myRep = !!p.rep; myAud = p.audPts || 0;
+    myAlive = p.alive !== false; myRep = !!p.rep; myAud = p.audPts || 0; myMiss = p.miss || 0;
     $("audView").textContent = myAud > 0 ? `🔮 観客ポイント：${myAud}` : "";
   });
   listen(room.child("teamState/" + myTeam + "/points"), s => {
@@ -465,7 +465,8 @@ function watch() {
       role = (myAlive && (mode !== "rep" || myRep)) ? "ans" : "pred";
       $("qTextP").textContent = q.text;
       $("roleBadge").className = "badge" + (role === "pred" ? " predB" : "");
-      $("roleBadge").textContent = role === "pred" ? "予想で参加" : "✋ 回答者";
+      const livesLeft = Math.max(0, (meta.lives || 1) - myMiss);
+      $("roleBadge").textContent = role === "pred" ? "予想で参加" : "✋ 回答者" + (meta.auto ? "　ライフ " + "❤️".repeat(livesLeft) : "");
       setRoleView(role === "pred");
       $("dblBadge").classList.toggle("hidden", !meta.dbl);
       if (meta.state === "reading") {
@@ -526,10 +527,15 @@ function watch() {
         else { msg = "予想ハズレ…"; sub = `正解は ${LABELS[correct]} でした`; }
       } else if (picked === correct) {
         msg = "🎉 正解！"; win = true;
-        sub = mode === "survival" ? "生き残り！次もがんばろう" : `チームに +${gain}点`;
+        sub = meta.auto ? `生き残り！チームに +${gain}点` : (mode === "survival" ? "生き残り！次もがんばろう" : `チームに +${gain}点`);
+      } else if (mode === "survival" && myAlive) {
+        // ライフが残っている（ピリオド1のライフ2）
+        const left = Math.max(0, (meta.lives || 1) - myMiss);
+        msg = picked === -1 ? "時間切れ…ライフ-1" : "ミス…ライフ-1";
+        sub = `正解は ${LABELS[correct]}。残りライフ ${"❤️".repeat(left)}　次はまちがえないように！`;
       } else if (mode === "survival") {
         msg = "<span class='out'>脱落…！</span>";
-        sub = `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！`;
+        sub = `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！次のピリオドで全員復活！`;
       } else if (picked === -1) {
         msg = "時間切れ…"; sub = `正解は ${LABELS[correct]} でした`;
       } else {
@@ -546,7 +552,7 @@ function watch() {
       clearInterval(timerInt);
       const me = meta.winnerPid && meta.winnerPid === myId;
       $("resultMsg").classList.toggle("win", !!me);
-      $("resultMsg").textContent = me ? "🏆 ピリオド優勝！" : `ピリオド${meta.period} 終了！`;
+      $("resultMsg").textContent = me ? "🏆 ピリオド優勝！" : `ピリオド${meta.period}${meta.pname ? "「" + meta.pname + "」" : ""} 終了！`;
       $("resultSub").textContent = (meta.winner ? `優勝：${meta.winner}さん。` : "") + "全員復活！次のピリオドもがんばろう";
       show("resultCard");
       return;
