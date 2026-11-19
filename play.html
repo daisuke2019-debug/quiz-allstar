@@ -535,7 +535,7 @@ function watch() {
         sub = `正解は ${LABELS[correct]}。残りライフ ${"❤️".repeat(left)}　次はまちがえないように！`;
       } else if (mode === "survival") {
         msg = "<span class='out'>脱落…！</span>";
-        sub = `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！次のピリオドで全員復活！`;
+        sub = meta.reviveAll ? `正解は ${LABELS[correct]}。全員脱落したので、最終ピリオドは次の問題から全員復活！` : `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！次のピリオドで全員復活！`;
       } else if (picked === -1) {
         msg = "時間切れ…"; sub = `正解は ${LABELS[correct]} でした`;
       } else {

@@ -262,6 +262,9 @@
       <button class="sub2 pingStart">📶 接続チェックをする</button>
       <button id="startGame">クイズ開始！</button>
     </div>
+    <div class="warn hidden" id="qCountWarnLobby" style="text-align:center;font-size:18px"></div>
+    <div>
+    </div>
   </div>
 
   <!-- 出題 -->
@@ -276,6 +279,7 @@
 
     <div id="prepArea">
       <div class="periodResult hidden" id="periodResult"></div>
+      <div class="warn hidden" id="qCountWarn" style="text-align:center;font-size:18px"></div>
       <div class="warn hidden" id="allOutWarn" style="text-align:center;font-size:18px">全員が脱落しています。このまま出題すると、全員が「予想投票」になります。<br>「このピリオドを終える」を押すと、全員が復活します。</div>
       <div class="row" style="justify-content:center">
         <label style="font-size:17px;cursor:pointer"><input type="checkbox" id="autoChk" checked style="width:20px;height:20px;vertical-align:middle"> 📋 資料どおりのピリオド進行（自動）</label>
@@ -520,7 +524,7 @@ const PLAN = [
   { name: "ユニバースサバイバル",   n: 6, lives: 1, consult: true,  dbl: true, last: true },
 ];
 let AUTO_SECS = 10, AUTO_CONSULT = 45; // 資料どおり：回答10秒・相談45秒
-let curConsult = false, curLives = 1, curAuto = false;
+let curConsult = false, curLives = 1, curAuto = false, finalRevive = false;
 const isAuto = () => $("autoChk").checked;
 const planOf = per => PLAN[Math.min(per, PLAN.length) - 1];
 // そのピリオドの最初の問題の番号（0から）／最後の問題の番号（最終ピリオドは残り全部）
@@ -632,6 +636,7 @@ $("entranceBtn").onclick = () => {
 
 // ===== 部屋 =====
 $("createRoom").onclick = async () => {
+  $("autoChk").disabled = false;
   if (!db) { alert("先にFirebase設定を貼ってください"); return; }
   collectAll();
   teams = teams.map(t => t.trim()).filter(Boolean);
@@ -664,6 +669,7 @@ $("createRoom").onclick = async () => {
 };
 
 function renderLobby() {
+  renderQCountWarn();
   const arr = Object.entries(playersCache);
   $("joinCount").textContent = arr.length;
   const box = $("lobbyTeams");
@@ -868,6 +874,7 @@ function showTicker(text) {
 }
 
 $("startGame").onclick = () => {
+  $("autoChk").disabled = true;
   if (Object.keys(playersCache).length === 0) { alert("参加者がまだいません"); return; }
   if (pingNonce) endPing();
   stopSound("entrance"); entranceOn = false; $("entranceBtn").textContent = "▶ 入場BGM";
@@ -888,9 +895,23 @@ function showPrep() {
   ["consultArea","questionArea","revealArea","revealBtn","nextBtn","finishBtn","periodEndBtn"].forEach(id => $(id).classList.add("hidden"));
   $("prepArea").classList.remove("hidden");
   $("askBtn").disabled = qi + 1 >= questions.length;
-  $("periodBtn").classList.toggle("hidden", !periodDirty);
+  // 最終ピリオドには「次のピリオド」がないので、ピリオドを終えるボタンは出さない
+  $("periodBtn").classList.toggle("hidden", !periodDirty || (isAuto() && !!planOf(period).last));
+  renderQCountWarn();
   renderAllOutWarn();
   setPrepNext();
+}
+// 資料どおりの進行は28問（6・8・8・6）。数が違うときは司会に知らせる
+function qCountMsg() {
+  if (!isAuto()) return "";
+  const total = PLAN.reduce((a, x) => a + x.n, 0), fin = periodStart(PLAN.length), n = questions.length;
+  if (n === total) return "";
+  if (n <= fin) return `⚠️ 問題が${n}問です（資料どおりは${total}問：6・8・8・6）。このままだと最終ピリオド（${fin + 1}問目から・得点2倍）に入りません`;
+  return `⚠️ 問題が${n}問です（資料どおりは${total}問）。最終ピリオドは${fin + 1}問目から${n - fin}問になります`;
+}
+function renderQCountWarn() {
+  const m = qCountMsg();
+  ["qCountWarn", "qCountWarnLobby"].forEach(id => { $(id).textContent = m; $(id).classList.toggle("hidden", !m); });
 }
 function setPrepNext() {
   const list = Object.values(playersCache);
@@ -1134,9 +1155,11 @@ $("revealBtn").onclick = async () => {
   speed.sort((a, b) => a.sec - b.sec);
   if (speed[0]) fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
   periodDirty = true;
+  // 最終ピリオドで全員脱落したら、次の問題の前に全員復活して最終を続ける（最後まで逆転のチャンスを残す）
+  finalRevive = curAuto && !!planOf(period).last && eligibleList.length > 0 && eligibleList.length === newlyOut.length && qi + 1 < questions.length;
   // 保存はうしろで行い、大画面の発表は待たせない（回線が遅くても止まらない）
   roomRef().update(updates)
-    .then(() => roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode, lives: curLives, auto: curAuto }))
+    .then(() => roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode, lives: curLives, auto: curAuto, reviveAll: finalRevive }))
     .catch(() => { $("offView").textContent = "⚠️ 結果の保存に失敗しました。ネット接続を確認してください"; });
 
   // ④ 正解の発表
@@ -1177,7 +1200,7 @@ $("revealBtn").onclick = async () => {
     const g = gains["t" + i];
     return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.bonus ? "・全員正解ボーナス！" : ""}${curDbl && g.pts > 0 ? "・🔥2倍" : ""}）`;
   }).filter(Boolean).join("<br>");
-  showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
+  if (finalRevive) showTicker("全員脱落！ 最終ピリオドなので、次の問題から全員復活して続けます！"); else showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
   playSound("correct");
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
   const allOutNow = eligibleList.length > 0 && eligibleList.length === newlyOut.length;
@@ -1189,7 +1212,17 @@ $("revealBtn").onclick = async () => {
   }
   else { $("nextBtn").classList.remove("hidden"); setNext("nextBtn", "次の問題へ"); }
 };
-$("nextBtn").onclick = showPrep;
+$("nextBtn").onclick = async () => {
+  if (finalRevive) {
+    finalRevive = false;
+    const up = {};
+    Object.keys(playersCache).forEach(pid => { up[`players/${pid}/alive`] = true; up[`players/${pid}/outAt`] = null; up[`players/${pid}/miss`] = 0; });
+    await roomRef().update(up);
+    showTicker("");
+    renderSurv();
+  }
+  showPrep();
+};
 $("periodEndBtn").onclick = () => { $("periodEndBtn").classList.add("hidden"); $("periodBtn").onclick(); };
 $("finishBtn").onclick = finishGame;
 // 確認はブラウザのダイアログを使わず「2回押し」にする（大画面にダイアログを出さない・自動操作でも止まらない）
