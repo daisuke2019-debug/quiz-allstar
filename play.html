@@ -571,7 +571,7 @@ function watch() {
       clearInterval(timerInt);
       let msg = "結果発表", win = false;
       if (meta.champPid === myId) { msg = "🏆 優勝！Galaxyマスター！"; win = true; }
-      else if (meta.audKingPid === myId) { msg = "🔮 観客王！"; win = true; }
+      else if ((meta.audKingPids || [meta.audKingPid]).includes(myId)) { msg = "🔮 観客王！"; win = true; }
       else if (meta.champTeam && meta.champTeam === myTeam) { msg = "🤝 ベストチーム賞！"; win = true; }
       $("resultMsg").classList.toggle("win", win);
       $("resultMsg").textContent = msg;

@@ -818,10 +818,18 @@ function teamMembers(tid) { return Object.values(playersCache).filter(p => p.tea
 function sortedTeams() {
   return teams.map((t, i) => {
     const tid = "t" + i, st = teamState[tid] || { points: 0, bonus: 0 };
-    return { tid, name: t, points: st.points || 0, bonus: st.bonus || 0, surv: teamSurvivors(tid), members: teamMembers(tid) };
-  }).sort((a,b) => b.points - a.points || b.surv - a.surv || b.bonus - a.bonus);
+    const avg = st.tCnt ? st.tSum / st.tCnt : Infinity;
+    return { tid, name: t, points: st.points || 0, bonus: st.bonus || 0, avg, surv: teamSurvivors(tid), members: teamMembers(tid) };
+  }).sort((a,b) => b.points - a.points || b.bonus - a.bonus || a.avg - b.avg);
 }
 let prevRanks = {};
+// 同じ点数のチームがあれば、何で順位が決まったかを添える（団結 → スピード）
+function tieNote(list, i) {
+  const t = list[i];
+  const same = list.filter(x => x.points === t.points && x.members > 0);
+  if (same.length < 2) return "";
+  return `（同点：全員正解${t.bonus}回・平均${isFinite(t.avg) ? t.avg.toFixed(2) + "秒" : "—"}）`;
+}
 function renderStandings() {
   const sorted = sortedTeams();
   $("standBody").innerHTML = sorted.map((t, i) => {
@@ -1103,7 +1111,7 @@ $("revealBtn").onclick = async () => {
   // ③ 採点
   const bonusPts = curAuto ? 3 : +$("bonusSel").value; // 資料どおり：全員正解ボーナス+3点（最終は2倍で+6点）
   const updates = {}, gains = {}, newlyOut = [], lifeLost = [], speed = [];
-  teams.forEach((t, i) => gains["t" + i] = { pts: 0, correct: 0, bonus: false });
+  teams.forEach((t, i) => gains["t" + i] = { pts: 0, correct: 0, bonus: false, tSum: 0, tCnt: 0 });
   let correctN = 0;
   eligibleList.forEach(([pid, p]) => {
     const a = answers[pid];
@@ -1115,7 +1123,7 @@ $("revealBtn").onclick = async () => {
       updates[`players/${pid}/score`] = (p.score || 0) + 1;
       updates[`players/${pid}/pScore`] = (p.pScore || 0) + 1;
       updates[`players/${pid}/pTime`] = +((p.pTime || 0) + sec).toFixed(2);
-      if (p.team && gains[p.team]) gains[p.team].correct++;
+      if (p.team && gains[p.team]) { gains[p.team].correct++; if (!a.manual) { gains[p.team].tSum += sec; gains[p.team].tCnt++; } }
     } else if (curMode === "survival") {
       // まちがい・未回答はライフ-1。ライフが0になったら脱落（ピリオド1だけライフ2）
       const miss = (p.miss || 0) + 1;
@@ -1151,6 +1159,7 @@ $("revealBtn").onclick = async () => {
     const st = teamState[tid] || { points: 0, bonus: 0 };
     updates[`teamState/${tid}/points`] = (st.points || 0) + g.pts;
     if (g.bonus) updates[`teamState/${tid}/bonus`] = (st.bonus || 0) + 1;
+    if (g.tCnt) { updates[`teamState/${tid}/tSum`] = +((st.tSum || 0) + g.tSum).toFixed(2); updates[`teamState/${tid}/tCnt`] = (st.tCnt || 0) + g.tCnt; }
   });
   speed.sort((a, b) => a.sec - b.sec);
   if (speed[0]) fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
@@ -1276,6 +1285,11 @@ $("periodBtn").onclick = async () => {
 };
 
 // ===== 結果発表 =====
+// 観客王：予想がいちばん当たった人。同じ回数なら全員（個人賞なので複数でよい）
+function audKingList(arr) {
+  const top = Math.max(0, ...arr.map(p => p.audPts || 0));
+  return top > 0 ? arr.filter(p => (p.audPts || 0) === top) : [];
+}
 async function finishGame() {
   clearInterval(timerInt);
   showTicker("");
@@ -1294,43 +1308,44 @@ async function finishGame() {
     return (b.pScore || 0) - (a.pScore || 0) || (a.pTime || 0) - (b.pTime || 0);
   });
   const champ = arr[0] || null;
-  const aud = [...arr].sort((a, b) => (b.audPts || 0) - (a.audPts || 0))[0];
-  const audKing = aud && (aud.audPts || 0) > 0 ? aud : null;
+  const audKings = audKingList(arr);
+  const audKing = audKings[0] || null;
+  const audNames = sfx => audKings.length ? audKings.map(p => esc(p.name) + sfx).join("・") : "";
   const bonusTop = [...ranked].sort((a, b) => b.bonus - a.bonus)[0];
   const speedKing = Object.entries(fastestCount).sort((a, b) => b[1] - a[1])[0];
   const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
   // スマホには「発表中」とだけ出す（優勝者は最後の発表まで伏せる）
   await roomRef().child("meta").set({ state: "awards", qi, period });
   finalMeta = { state: "finished", qi, period,
-    champPid: champ ? champ.id : "", champTeam: bestTeam ? bestTeam.tid : "", audKingPid: audKing ? audKing.id : "" };
+    champPid: champ ? champ.id : "", champTeam: bestTeam ? bestTeam.tid : "", audKingPid: audKing ? audKing.id : "", audKingPids: audKings.map(p => p.id) };
   $("champView").innerHTML = champ ? `🏆 Galaxyマスター：${esc(champ.name)}さん` : "優勝者なし";
   $("awardList").innerHTML =
-    `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? esc(audKing.name) : "—"}</b><br>` +
+    `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("") : "—"}</b><br>` +
     `🤝 ベストチーム賞（${bestTeam ? bestTeam.points : 0}点）：<b>${bestTeam ? esc(bestTeam.name) : "—"}</b><br>` +
     `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) : "—"}</b><br>` +
     `💪 団結賞（全員正解 ${bonusTop ? bonusTop.bonus : 0}回）：<b>${bonusTop && bonusTop.bonus > 0 ? esc(bonusTop.name) : "—"}</b>` +
     (periodWinners.length ? "<br><br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("<br>") : "");
   $("finalTeamBody").innerHTML = ranked.map((t, i) =>
-    `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.points}</td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
+    `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.points}<br><small>${tieNote(ranked, i)}</small></td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
   $("rankBody").innerHTML = arr.map((p, i) =>
     `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(teamName(p.team))}</td><td>${p.alive === false ? `第${(p.outAt ?? 0)+1}問で脱落` : "最後まで生存！"}</td><td>${p.score || 0}</td><td>${p.audPts || 0}</td></tr>`).join("");
   // ===== 順番に発表する（4位以下まとめて → 3位 → 2位 → 1位 → Galaxyマスター） =====
   const teamsIn = ranked.filter(t => t.members > 0);
   awardSteps = [];
   awardSteps.push({ drum: 1200, html: `<div class="alabel">🎖 個人賞</div><div class="asub">` +
-    `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? esc(audKing.name) + "さん" : "該当なし"}</b><br>` +
+    `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("さん") : "該当なし"}</b><br>` +
     `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) + "さん" : "該当なし"}</b><br>` +
     `💪 団結賞（全員正解 ${bonusTop ? bonusTop.bonus : 0}回）：<b>${bonusTop && bonusTop.bonus > 0 ? esc(bonusTop.name) : "該当なし"}</b>` +
     (periodWinners.length ? "<br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("　") : "") + `</div>`,
     btn: teamsIn.length > 3 ? "チーム順位（4位から）" : "チーム順位の発表へ" });
   if (teamsIn.length > 3) {
     awardSteps.push({ drum: 800, html: `<div class="alabel">チーム順位　4位〜</div><div class="asub">` +
-      teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点`).join("<br>") + `</div>`, btn: "第3位の発表" });
+      teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点${tieNote(teamsIn, i + 3)}`).join("<br>") + `</div>`, btn: "第3位の発表" });
   }
   const placeLabel = ["🥇 第1位　ベストチーム賞", "🥈 第2位", "🥉 第3位"];
   for (let i = Math.min(3, teamsIn.length) - 1; i >= 0; i--) {
     const t = teamsIn[i];
-    awardSteps.push({ drum: i === 0 ? 2200 : 1400, html: `<div class="alabel">${placeLabel[i]}</div><div class="aname">${esc(t.name)}</div><div class="asub">${t.points}点</div>`,
+    awardSteps.push({ drum: i === 0 ? 2200 : 1400, html: `<div class="alabel">${placeLabel[i]}</div><div class="aname">${esc(t.name)}</div><div class="asub">${t.points}点${tieNote(teamsIn, i)}</div>`,
       btn: i === 0 ? "🏆 Galaxyマスターの発表！" : (i === 1 ? "第1位の発表" : "第2位の発表"), confetti: i === 0 });
   }
   awardSteps.push({ drum: 2600, html: `<div class="alabel">🏆 Galaxyマスター（個人優勝）</div><div class="aname">${champ ? esc(champ.name) + "さん" : "該当なし"}</div><div class="asub">最後まで生き残った王者！</div>`, final: true });
