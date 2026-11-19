@@ -504,7 +504,7 @@ $("importFile").onchange = e => {
 
 let pin = null, qi = -1, timerInt = null, playersCache = {}, teamState = {}, curMode = "survival";
 let curQStart = 0, curEndsAt = 0, curSecs = 15, fastestCount = {};
-let period = 1, periodWinners = [], periodDirty = false, liveOff = [], curDbl = false;
+let period = 1, periodWinners = [], periodDirty = false, liveOff = [], curDbl = false, pendingRemove = { pid: "", t: 0 };
 // スマホの待機画面の案内（Wi-Fiオフ／会場Wi-Fi）はいつでも切り替えられる
 $("noticeSel").onchange = () => { if (pin) roomRef().child("notice").set($("noticeSel").value); };
 const roomRef = () => db.ref("rooms/" + pin);
@@ -648,13 +648,21 @@ function renderLobby() {
     const d = document.createElement("div");
     d.className = "teamblock";
     d.innerHTML = `<h3>${esc(t)}（${members.length}人）</h3><div class="names">${members.map(([pid,p]) =>
-      `<span data-pid="${pid}" class="${p.alive === false ? "out" : ""} ${p.rep ? "rep" : ""} ${connStatus(p) === "off" ? "off" : ""}">${connIcon(p)}${pingMark(pid)} ${p.rep ? "★" : ""}${esc(p.name)}</span>`).join("") || "（まだいません）"}</div>`;
+      `<span data-pid="${pid}" class="${p.alive === false ? "out" : ""} ${p.rep ? "rep" : ""} ${connStatus(p) === "off" ? "off" : ""}">${connIcon(p)}${pingMark(pid)} ${p.rep ? "★" : ""}${esc(p.name)}${pendingRemove.pid === pid ? " ⚠️もう一度押すと外す" : ""}</span>`).join("") || "（まだいません）"}</div>`;
     box.appendChild(d);
   });
   box.querySelectorAll("[data-pid]").forEach(sp => sp.onclick = async () => {
     const pid = sp.dataset.pid;
     if ($("lobbyClick").value === "remove") {
-      if (confirm(`${playersCache[pid] ? playersCache[pid].name : ""} さんを参加者から外しますか？`)) await roomRef().child("players/" + pid).remove();
+      // 2回押しで外す（1回目は名前に「もう一度押すと外す」と出す。5秒で取り消し）
+      if (pendingRemove.pid === pid && Date.now() - pendingRemove.t < 5000) {
+        pendingRemove = { pid: "", t: 0 };
+        await roomRef().child("players/" + pid).remove();
+      } else {
+        pendingRemove = { pid, t: Date.now() };
+        renderLobby();
+        setTimeout(() => { if (pendingRemove.pid === pid) { pendingRemove = { pid: "", t: 0 }; renderLobby(); } }, 5000);
+      }
       return;
     }
     const cur = playersCache[pid] && playersCache[pid].rep;
@@ -931,6 +939,8 @@ async function beginAnswer() {
   curSecs = +$("secSel").value;
   curQStart = now();
   curEndsAt = curQStart + curSecs * 1000;
+  // 画面のカウントダウンはPC内部の時計で数える（時刻合わせのずれの影響を受けない）
+  const hostLocalEnd = performance.now() + curSecs * 1000;
   renderChoices(q);
   $("questionArea").classList.remove("hidden");
   $("readingMsg").classList.add("hidden");
@@ -951,7 +961,7 @@ async function beginAnswer() {
   clearInterval(timerInt);
   let lastSec = null;
   timerInt = setInterval(() => {
-    const left = Math.max(0, curEndsAt - now());
+    const left = Math.max(0, hostLocalEnd - performance.now());
     const secLeft = Math.ceil(left / 1000);
     $("timerView").textContent = secLeft;
     const danger = left <= 5000 && left > 0;
@@ -1097,6 +1107,11 @@ $("revealBtn").onclick = async () => {
       setTimeout(() => s.remove(), 950);
     }
   }
+  // 残り人数は、サーバーの返事を待たずに発表と同時に減らす
+  if (curMode === "survival") {
+    const aliveNow = eligibleList.length - newlyOut.length; // 発表前に生きていた人 − 今回の脱落者
+    animateNum($("survNum"), aliveNow);
+  }
   const rate = eligibleList.length ? Math.round(correctN * 100 / eligibleList.length) : 0;
   $("rateView").innerHTML = eligibleList.length
     ? `正解は <b>${LABELS[q.correct]}</b>　正解率 <b>${rate}%</b><br><span class="note">正解 ${correctN}人 ／ 回答する人 ${eligibleList.length}人</span>`
@@ -1121,7 +1136,21 @@ $("revealBtn").onclick = async () => {
 };
 $("nextBtn").onclick = showPrep;
 $("finishBtn").onclick = finishGame;
-$("earlyFinishBtn").onclick = () => { if (confirm("ここで結果発表に進みますか？")) finishGame(); };
+// 確認はブラウザのダイアログを使わず「2回押し」にする（大画面にダイアログを出さない・自動操作でも止まらない）
+function twoStep(btn, armedLabel, action) {
+  if (btn.dataset.armed === "1") {
+    clearTimeout(btn._t);
+    btn.dataset.armed = "";
+    btn.textContent = btn.dataset.orig;
+    action();
+    return;
+  }
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
+  btn.dataset.armed = "1";
+  btn.textContent = armedLabel;
+  btn._t = setTimeout(() => { btn.dataset.armed = ""; btn.textContent = btn.dataset.orig; }, 5000);
+}
+$("earlyFinishBtn").onclick = () => twoStep($("earlyFinishBtn"), "⚠️ もう一度押すと結果発表へ（5秒以内）", finishGame);
 
 // ===== ピリオド =====
 function periodWinner() {

@@ -196,7 +196,7 @@ const now = () => Date.now() + serverOffset;
 const $ = id => document.getElementById(id);
 
 let pin = null, myId = null, myTeam = null, myTeamName = "", myName = "", myAlive = true, myRep = false, myAud = 0, myExists = false;
-let qCache = null, readyQi = -1, metaSeq = 0, currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
+let localEnd = 0, qCache = null, readyQi = -1, metaSeq = 0, currentQi = -1, role = "ans", picked = -1, predicted = -1, curEndsAt = 0, timerInt = null, lastStamp = 0, shownKey = "";
 
 const err = m => $("joinErr").textContent = m;
 
@@ -311,12 +311,13 @@ document.addEventListener("visibilitychange", () => {
   if (myExists && !connected) { try { db.goOffline(); db.goOnline(); } catch (e) {} }
 });
 window.addEventListener("online", () => { if (myExists && !connected) { try { db.goOffline(); db.goOnline(); } catch (e) {} } });
-function startTimer(endsAt, elId, danger, onEnd) {
+// localEnd を渡すと、スマホ内部の時計（時刻合わせの影響を受けない）で数える
+function startTimer(endsAt, elId, danger, onEnd, localEnd) {
   clearInterval(timerInt);
   const el = $(elId);
   el.classList.remove("danger");
   timerInt = setInterval(() => {
-    const left = Math.max(0, endsAt - now());
+    const left = Math.max(0, localEnd !== undefined ? localEnd - performance.now() : endsAt - now());
     el.textContent = Math.ceil(left / 1000);
     if (danger) el.classList.toggle("danger", left <= 5000 && left > 0);
     if (left <= 0) { clearInterval(timerInt); if (onEnd) onEnd(); }
@@ -478,6 +479,13 @@ function watch() {
         return;
       }
       curEndsAt = meta.endsAt || 0;
+      // 締切はスマホ内部の時計で数える（再接続で時刻合わせがずれても、早く閉じないように）
+      // 読み上げ中から見ていた問題：開始からの遅れは最大2秒とみなす／途中参加：サーバー時刻どおり
+      const dur = meta.startAt ? meta.endsAt - meta.startAt : 0;
+      const remain = (readyQi === meta.qi && dur > 0)
+        ? dur - Math.min(Math.max(now() - meta.startAt, 0), 2000)
+        : curEndsAt - now();
+      localEnd = performance.now() + remain;
       // 再接続したときのために、すでに送った回答・予想を読み込む
       // 読み上げ中から見ていた問題なら、まだ答えていないので問い合わせは不要（すぐ押せるようにする）
       if (readyQi !== meta.qi) {
@@ -487,7 +495,7 @@ function watch() {
         if (prev) { if (role === "pred") predicted = prev.choice; else picked = prev.choice; }
       }
       const chosen = role === "pred" ? predicted : picked;
-      const open = now() < curEndsAt;
+      const open = performance.now() < localEnd;
       if (open && chosen < 0 && navigator.vibrate) navigator.vibrate(120);
       renderButtons(q, role, open ? "open" : "closed", chosen);
       if (chosen >= 0) $("pickedMsg").textContent = `${LABELS[chosen]} で${role === "pred" ? "予想" : "回答"}したよ。結果を待とう`;
@@ -501,7 +509,7 @@ function watch() {
           $("btnGrid").querySelectorAll(".abtn").forEach(b => b.disabled = true);
           $("pickedMsg").textContent = "締切！ 結果を待とう";
         }
-      });
+      }, localEnd);
       return;
     }
 
@@ -612,13 +620,13 @@ $("pingBtn").onclick = async () => {
   }
 };
 async function pick(j) {
-  if (picked >= 0 || now() > curEndsAt) return;
+  if (picked >= 0 || performance.now() > localEnd) return;
   picked = j;
   $("pickedMsg").textContent = LABELS[j] + " で回答したよ。結果を待とう";
   await send("answers", j);
 }
 async function predict(j) {
-  if (predicted >= 0 || now() > curEndsAt) return;
+  if (predicted >= 0 || performance.now() > localEnd) return;
   predicted = j;
   $("pickedMsg").textContent = LABELS[j] + " を予想したよ。結果を待とう";
   await send("predictions", j);
