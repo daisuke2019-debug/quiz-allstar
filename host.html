@@ -941,35 +941,41 @@ $("askBtn").onclick = async () => {
   // 問題文を先に書いてから状態を変える（スマホが古い問題を読まないように）
   await roomRef().child("question").set({ text: q.text, choices: q.choices, qi });
   clearInterval(timerInt);
-  if (curConsult) {
-    const secs = curAuto ? AUTO_CONSULT : +$("consultSel").value;
-    const endsAt = now() + secs * 1000;
-    await roomRef().child("meta").set({ state: "consult", qi, endsAt, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, pname: curAuto ? planOf(period).name : "" });
-    setNext(null, "相談タイム中…（終わると「回答スタート！」が出ます）");
-    $("consultArea").classList.remove("hidden");
-    $("questionArea").classList.add("hidden");
-    $("consultDoneBtn").classList.add("hidden");
-    playSound("consult");
-    timerInt = setInterval(() => {
-      const left = Math.max(0, endsAt - now());
-      const el = $("consultTimer");
-      el.textContent = Math.ceil(left / 1000);
-      el.classList.toggle("danger", left <= 5000 && left > 0);
-      if (left <= 0) { clearInterval(timerInt); stopSound("consult"); beep(660, 0.3); $("consultDoneBtn").classList.remove("hidden"); setNext("consultDoneBtn", "回答スタート！"); }
-    }, 100);
-  } else {
+  {
     // 読み上げ中：問題と選択肢を見せるが、まだ答えられない
-    await roomRef().child("meta").set({ state: "reading", qi, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, pname: curAuto ? planOf(period).name : "" });
+    await roomRef().child("meta").set({ state: "reading", qi, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, consult: curConsult, pname: curAuto ? planOf(period).name : "" });
     renderChoices(q);
     $("questionArea").classList.remove("hidden");
     $("readingMsg").classList.remove("hidden");
     $("ringWrap").classList.add("hidden");
     $("ansCount").textContent = "";
+    $("startAnsBtn").textContent = curConsult ? "相談タイムスタート！" : "回答スタート！";
+    $("readingMsg").textContent = curConsult ? "問題を読み上げたら「相談タイムスタート！」を押してください" : "問題を読み上げたら「回答スタート！」を押してください";
     $("startAnsBtn").classList.remove("hidden");
-    setNext("startAnsBtn", "問題を読み上げたら「回答スタート！」");
+    setNext("startAnsBtn", curConsult ? "問題を読み上げたら「相談タイムスタート！」" : "問題を読み上げたら「回答スタート！」");
   }
 };
-$("startAnsBtn").onclick = () => { $("startAnsBtn").classList.add("hidden"); beginAnswer(); };
+// 相談タイム：読み上げのあとに始める（①読み上げ → ②相談 → ③回答スタート）。大画面には問題と選択肢を出したまま
+async function startConsult() {
+  const secs = curAuto ? AUTO_CONSULT : +$("consultSel").value;
+  const endsAt = now() + secs * 1000;
+  const localEnd = performance.now() + secs * 1000;
+  await roomRef().child("meta").set({ state: "consult", qi, endsAt, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, pname: curAuto ? planOf(period).name : "" });
+  setNext(null, "相談タイム中…（終わると「回答スタート！」が出ます）");
+  $("readingMsg").classList.add("hidden");
+  $("consultArea").classList.remove("hidden");
+  $("consultDoneBtn").classList.add("hidden");
+  playSound("consult");
+  clearInterval(timerInt);
+  timerInt = setInterval(() => {
+    const left = Math.max(0, localEnd - performance.now());
+    const el = $("consultTimer");
+    el.textContent = Math.ceil(left / 1000);
+    el.classList.toggle("danger", left <= 5000 && left > 0);
+    if (left <= 0) { clearInterval(timerInt); stopSound("consult"); beep(660, 0.3); $("consultDoneBtn").classList.remove("hidden"); setNext("consultDoneBtn", "回答スタート！"); }
+  }, 100);
+}
+$("startAnsBtn").onclick = () => { $("startAnsBtn").classList.add("hidden"); if (curConsult) startConsult(); else beginAnswer(); };
 $("consultDoneBtn").onclick = () => { $("consultArea").classList.add("hidden"); stopSound("consult"); beginAnswer(); };
 
 async function beginAnswer() {

@@ -475,7 +475,7 @@ function watch() {
         $("timerView").textContent = "";
         $("timerView").classList.remove("danger");
         renderButtons(q, role, "wait", -1);
-        $("pickedMsg").textContent = role === "pred" ? "問題を読み上げ中…合図で予想スタート！" : "問題を読み上げ中…合図で回答スタート！";
+        $("pickedMsg").textContent = meta.consult ? "問題を読み上げ中…このあと相談タイム！" : (role === "pred" ? "問題を読み上げ中…合図で予想スタート！" : "問題を読み上げ中…合図で回答スタート！");
         show("ansCard");
         return;
       }
