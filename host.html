@@ -228,6 +228,41 @@
     #revealArea .gainlist { font-size: 15px; line-height: 1.35; margin-top: 2px; }
     #revealArea .top10 tr:nth-child(n+6) { display: none; } /* 低い画面では早く答えた人は5位まで */
   }
+  /* ===== 投影用デザイン（横長の画面）：問題と4択で画面の高さいっぱいを使う ===== */
+  @media (min-width: 1200px) {
+    .wrap { padding-bottom: 8px; }
+    .stageMain { display: flex; flex-direction: column; min-height: calc(100vh - 150px); }
+    /* 出題前：画面のまん中に、次の問題の案内と「出題する！」を大きく */
+    #prepArea:not(.hidden) { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+    #prepArea #askBtn { font-size: 30px; padding: 18px 64px; }
+    #prepArea .periodResult { font-size: 34px; }
+    #qNum { font-size: 18px; }
+    #questionArea:not(.hidden) { flex: 1 1 auto; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto 1fr auto; column-gap: 28px; align-items: center; }
+    #questionArea .qtext { grid-column: 1; grid-row: 1; text-align: left; font-size: clamp(34px, 2.6vh + 1.3vw, 60px); line-height: 1.3; padding: 10px 6px 6px; text-wrap: balance; letter-spacing: .01em; }
+    #questionArea .ringwrap { grid-column: 2; grid-row: 1 / span 2; margin: 0 6px 0 0; }
+    #questionArea .reading { grid-column: 1 / -1; grid-row: 2; text-align: left; margin: 0 0 8px 6px; font-size: 20px; }
+    #questionArea #ansCount { grid-column: 1; grid-row: 2; text-align: left; margin: 0 0 8px 6px; font-size: 20px; }
+    #questionArea .choices { grid-column: 1 / -1; grid-row: 3; align-self: stretch; height: 100%; grid-auto-rows: 1fr; gap: 18px; margin-top: 4px; }
+    #questionArea > .row { grid-column: 1 / -1; grid-row: 4; margin-top: 12px; }
+    .choice { display: flex; align-items: center; gap: .55em; text-align: left; min-height: 0; padding: 16px 30px; border-radius: 24px; border: 2px solid rgba(255,255,255,.6);
+      font-size: clamp(28px, 2.2vh + 1.1vw, 50px); line-height: 1.25; letter-spacing: .02em; }
+    .choice small { flex: 0 0 auto; width: 1.55em; height: 1.55em; display: grid; place-items: center; border-radius: 50%; font-size: .82em; font-weight: 900; padding: 0; margin: 0;
+      background: rgba(255,255,255,.96); box-shadow: 0 3px 10px rgba(0,0,0,.35), inset 0 -3px 0 rgba(0,0,0,.12); }
+    .c0 small { color: #c4183a; } .c1 small { color: #0f4fbf; } .c2 small { color: #946500; } .c3 small { color: #097a42; }
+    .choice .cnt { position: static; transform: none; margin-left: auto; }
+    /* 発表中：選択肢は横1列でコンパクトに、グラフと結果を見せる */
+    .stageMain:has(#revealArea:not(.hidden)) #questionArea { flex: 0 0 auto; }
+    .stageMain:has(#revealArea:not(.hidden)) #questionArea .qtext { font-size: clamp(26px, 1.6vh + 1vw, 40px); padding-top: 2px; }
+    .stageMain:has(#revealArea:not(.hidden)) #questionArea .choices { height: auto; grid-auto-rows: auto; gap: 12px; }
+    .stageMain:has(#revealArea:not(.hidden)) .choice { font-size: 24px; padding: 10px 16px; border-radius: 18px; gap: .45em; min-height: 74px; }
+    .stageMain:has(#revealArea:not(.hidden)) .choice .cnt { font-size: 32px; }
+    .stageSide { font-size: 17px; }
+    .choice .cnt { white-space: nowrap; }
+  }
+  @media (min-width: 1200px) and (max-width: 1600px) {
+    .stageMain:has(#revealArea:not(.hidden)) .choice { font-size: 19px; padding: 8px 12px; min-height: 64px; }
+    .stageMain:has(#revealArea:not(.hidden)) .choice .cnt { font-size: 24px; }
+  }
 </style>
 </head>
 <body>
