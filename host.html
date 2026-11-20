@@ -180,6 +180,54 @@
   #proxyPanel h3 { text-align: center; font-size: 22px; margin-bottom: 12px; }
   #proxyPanel .pbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   #proxyPanel .pbtns button { border-radius: 12px; font-size: 26px; padding: 18px; box-shadow: none; border: 2px solid rgba(255,255,255,.7); }
+  .sideMon { margin-top: 16px; border-top: 1px solid #1c2f6e; padding-top: 10px; }
+  /* 横に広い画面（プロジェクター）：2列にして、できるだけスクロールせずに見せる */
+  @media (min-width: 1200px) {
+    .wrap { max-width: none; padding: 8px 18px 56px; }
+    h1.logo { font-size: 30px; margin: 0; }
+    h1.logo .brand { font-size: 13px; }
+    .sub { margin-bottom: 6px; font-size: 11px; }
+    #stageCard { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(330px, 1fr); gap: 18px; padding: 14px 18px; align-items: start; }
+    .stageSide { border-left: 1px solid #1c2f6e; padding-left: 16px; }
+    .stageSide .sideMon { margin-top: 0; border-top: none; padding-top: 0; }
+    .stageSide h2 { margin-top: 10px !important; }
+    .stageSide table { font-size: 15px; }
+    .qtext { font-size: 38px; padding: 6px 8px; }
+    .choices { gap: 12px; }
+    .choice { min-height: 96px; padding: 18px 20px; font-size: 32px; }
+    .timer { font-size: 64px; }
+    #revealArea { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; align-items: start; }
+    #revealArea .dist { grid-column: 1; grid-row: 1 / span 4; }
+    #revealArea .top10 { grid-column: 2; max-width: none; margin: 0; font-size: 15px; }
+    #revealArea .top10 h2 { font-size: 17px; margin: 2px 0; }
+    #revealArea .top10 td { padding: 3px 8px; }
+    /* 発表中は選択肢を横1列にして、グラフと結果を同じ画面に収める */
+    .stageMain:has(#revealArea:not(.hidden)) .choices { grid-template-columns: repeat(4, 1fr); }
+    .stageMain:has(#revealArea:not(.hidden)) .choice { min-height: 70px; font-size: 22px; padding: 12px 14px; }
+    .stageMain:has(#revealArea:not(.hidden)) .choice .cnt { position: static; transform: none; display: block; font-size: 30px; text-align: right; }
+    /* 次に押すボタンは、いつも画面の下に見えるようにする */
+    .stageMain > .row:last-child { position: sticky; bottom: 6px; z-index: 5; margin-top: 8px !important; }
+    #revealArea .dist { grid-row: 1 / span 3; }
+  }
+  /* 横長で高さが低い画面（1366×768・1280×800など） */
+  @media (min-width: 1200px) and (max-height: 900px) {
+    h1.logo, .sub { display: none; }
+    .qtext { font-size: 30px; line-height: 1.35; padding: 2px 6px; }
+    .choice { min-height: 70px; padding: 12px 16px; font-size: 26px; }
+    .ringwrap, .ringwrap svg { width: 104px; height: 104px; }
+    .timer { font-size: 48px; }
+    .dist { margin: 6px 6px 2px; gap: 14px; }
+    .dtrack { height: 110px; }
+    .rate { font-size: 24px; margin-top: 2px; }
+    .rate b { font-size: 46px; }
+    .survivors { font-size: 22px; margin-top: 4px; }
+    .survivors b { font-size: 36px; }
+    .gainlist { font-size: 17px; line-height: 1.5; }
+    .survbar { padding: 2px 6px 6px; margin-bottom: 4px; }
+    .survbar .alive b { font-size: 42px; }
+    #revealArea .gainlist { font-size: 15px; line-height: 1.35; margin-top: 2px; }
+    #revealArea .top10 tr:nth-child(n+6) { display: none; } /* 低い画面では早く答えた人は5位まで */
+  }
 </style>
 </head>
 <body>
@@ -269,6 +317,7 @@
 
   <!-- 出題 -->
   <div class="card glow hidden" id="stageCard">
+   <div class="stageMain">
     <div class="survbar">
       <span class="period" id="periodLabel">ピリオド1</span>
       <span class="off" id="offView"></span>
@@ -334,8 +383,9 @@
       <button id="periodEndBtn" class="hidden">ピリオド結果へ（全員復活）</button>
       <button id="finishBtn" class="hidden">結果発表へ</button>
     </div>
-
-    <div style="margin-top:16px;border-top:1px solid #1c2f6e;padding-top:10px">
+   </div>
+   <div class="stageSide">
+    <div class="sideMon">
       <div class="monHead"><span>👥 参加者モニター <span id="proxyHint" class="note"></span></span><span id="monSum"></span></div>
       <div class="monitor" id="monitor"></div>
       <div class="pingNg" id="noAnsView" style="font-size:17px;margin-top:6px"></div>
@@ -344,6 +394,7 @@
     <h2 style="margin-top:14px">チーム順位</h2>
     <table><thead><tr><th>順位</th><th>チーム</th><th>点数</th><th>全員正解</th><th>残り人数</th></tr></thead><tbody id="standBody"></tbody></table>
     <div class="row" style="justify-content:flex-end"><button class="sub2" id="earlyFinishBtn">ここで結果発表へ進む</button></div>
+   </div>
   </div>
 
   <!-- 結果 -->
@@ -1165,7 +1216,8 @@ $("revealBtn").onclick = async () => {
   if (speed[0]) fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
   periodDirty = true;
   // 最終ピリオドで全員脱落したら、次の問題の前に全員復活して最終を続ける（最後まで逆転のチャンスを残す）
-  finalRevive = curAuto && !!planOf(period).last && eligibleList.length > 0 && eligibleList.length === newlyOut.length && qi + 1 < questions.length;
+  // 全員脱落したら、ピリオドを終えずに次の問題から全員復活して続ける（ピリオドの最後の問題なら「ピリオド結果へ」で復活）
+  finalRevive = curAuto && eligibleList.length > 0 && eligibleList.length === newlyOut.length && qi + 1 < questions.length && (!!planOf(period).last || qi < periodEnd(period));
   // 保存はうしろで行い、大画面の発表は待たせない（回線が遅くても止まらない）
   roomRef().update(updates)
     .then(() => roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode, lives: curLives, auto: curAuto, reviveAll: finalRevive }))
@@ -1209,12 +1261,12 @@ $("revealBtn").onclick = async () => {
     const g = gains["t" + i];
     return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.bonus ? "・全員正解ボーナス！" : ""}${curDbl && g.pts > 0 ? "・🔥2倍" : ""}）`;
   }).filter(Boolean).join("<br>");
-  if (finalRevive) showTicker("全員脱落！ 最終ピリオドなので、次の問題から全員復活して続けます！"); else showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
+  if (finalRevive) showTicker("全員脱落！ 次の問題から全員復活して続けます！"); else showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
   playSound("correct");
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
   const allOutNow = eligibleList.length > 0 && eligibleList.length === newlyOut.length;
   if (qi + 1 >= questions.length) { $("finishBtn").classList.remove("hidden"); setNext("finishBtn", "結果発表へ"); }
-  else if (curAuto && !planOf(period).last && (qi >= periodEnd(period) || allOutNow)) {
+  else if (curAuto && !planOf(period).last && qi >= periodEnd(period)) {
     // ピリオドの最後の問題（または全員脱落）→ ピリオド結果と全員復活へ
     $("periodEndBtn").classList.remove("hidden");
     setNext("periodEndBtn", allOutNow ? "全員脱落 →「ピリオド結果へ」で全員復活" : "ピリオド終了 →「ピリオド結果へ」");

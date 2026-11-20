@@ -33,7 +33,8 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .abtn { font-family: inherit; border: 3px solid rgba(255,255,255,.75); border-radius: 16px; min-height: 128px; font-size: 44px; font-weight: bold; color: #fff; cursor: pointer; position: relative; overflow: hidden;
     box-shadow: inset 0 -12px 20px rgba(0,0,0,.35), inset 0 8px 16px rgba(255,255,255,.25), 0 5px 12px rgba(0,0,0,.5); text-shadow: 0 2px 4px rgba(0,0,0,.5); }
-  .abtn small { display: block; font-size: 15px; font-weight: normal; margin-top: 4px; padding: 0 6px; }
+  .abtn small { display: block; font-size: 26px; font-weight: bold; line-height: 1.25; margin-top: 4px; padding: 0 8px; word-break: break-word; }
+  .abtn { font-size: 28px; }
   .c0 { background: linear-gradient(180deg, #ff5f7a, #d21f3c 60%, #a3122a); }
   .c1 { background: linear-gradient(180deg, #4d94ff, #1256c9 60%, #0b3d94); }
   .c2 { background: linear-gradient(180deg, #ffd94d, #d99a00 60%, #a87400); }
@@ -343,6 +344,9 @@ function renderButtons(q, kind, state, chosen) {
     b.className = `abtn ${COLORS[j]} ${kind === "pred" ? "pred" : ""} ${state === "wait" ? "wait" : ""}`;
     b.innerHTML = LABELS[j] + "<small></small>";
     b.querySelector("small").textContent = c;
+    // 選択肢の文字は大きく。長い言葉だけ少し小さくして、途中で切れにくくする
+    const len = [...String(c)].length;
+    b.querySelector("small").style.fontSize = (len <= 5 ? 28 : len <= 7 ? 24 : len <= 10 ? 21 : 19) + "px";
     b.disabled = state === "closed" || chosen >= 0;
     if (chosen >= 0) b.classList.add(j === chosen ? "picked" : "dim");
     b.onclick = () => {
@@ -535,7 +539,7 @@ function watch() {
         sub = `正解は ${LABELS[correct]}。残りライフ ${"❤️".repeat(left)}　次はまちがえないように！`;
       } else if (mode === "survival") {
         msg = "<span class='out'>脱落…！</span>";
-        sub = meta.reviveAll ? `正解は ${LABELS[correct]}。全員脱落したので、最終ピリオドは次の問題から全員復活！` : `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！次のピリオドで全員復活！`;
+        sub = meta.reviveAll ? `正解は ${LABELS[correct]}。全員脱落したので、次の問題から全員復活！` : `正解は ${LABELS[correct]}。ここからは予想投票で参加しよう！次のピリオドで全員復活！`;
       } else if (picked === -1) {
         msg = "時間切れ…"; sub = `正解は ${LABELS[correct]} でした`;
       } else {
