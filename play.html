@@ -570,9 +570,13 @@ function watch() {
     if (meta.state === "finished") {
       clearInterval(timerInt);
       let msg = "結果発表", win = false;
-      if (meta.champPid === myId) { msg = "🏆 優勝！Galaxyマスター！"; win = true; }
-      else if ((meta.audKingPids || [meta.audKingPid]).includes(myId)) { msg = "🔮 観客王！"; win = true; }
-      else if (meta.champTeam && meta.champTeam === myTeam) { msg = "🤝 ベストチーム賞！"; win = true; }
+      // Galaxyマスター＝優勝チーム／ベストチーム賞＝全員正解がいちばん多いチーム／サバイバル王・観客王＝個人賞
+      const prizes = [];
+      if (meta.masterTeam && meta.masterTeam === myTeam) prizes.push("🏆 優勝！Galaxyマスター！");
+      if (meta.bestTeam && meta.bestTeam === myTeam) prizes.push("🤝 ベストチーム賞！");
+      if (meta.survPid === myId) prizes.push("🎖 サバイバル王！");
+      if ((meta.audKingPids || [meta.audKingPid]).includes(myId)) prizes.push("🔮 観客王！");
+      if (prizes.length) { msg = prizes.join(" "); win = true; }
       $("resultMsg").classList.toggle("win", win);
       $("resultMsg").textContent = msg;
       $("resultSub").textContent = "順位は大画面を見てね。おつかれさま！";

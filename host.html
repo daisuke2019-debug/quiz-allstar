@@ -1299,7 +1299,6 @@ async function finishGame() {
     periodDirty = false;
   }
   const ranked = sortedTeams();
-  const bestTeam = ranked[0];
   const arr = Object.entries(playersCache).map(([id, p]) => ({ id, ...p }));
   arr.sort((a, b) => {
     const av = a.alive === false ? 0 : 1, bv = b.alive === false ? 0 : 1;
@@ -1307,48 +1306,57 @@ async function finishGame() {
     if ((b.outAt ?? -1) !== (a.outAt ?? -1)) return (b.outAt ?? -1) - (a.outAt ?? -1);
     return (b.pScore || 0) - (a.pScore || 0) || (a.pTime || 0) - (b.pTime || 0);
   });
-  const champ = arr[0] || null;
+  // 資料どおり：Galaxyマスター＝優勝チーム（チーム1位）／ベストチーム賞＝全員正解がいちばん多いチーム
+  // 最後まで生き残った人は「サバイバル王」として個人賞で紹介する
+  const champ = arr[0] || null; // サバイバル王
   const audKings = audKingList(arr);
   const audKing = audKings[0] || null;
   const audNames = sfx => audKings.length ? audKings.map(p => esc(p.name) + sfx).join("・") : "";
-  const bonusTop = [...ranked].sort((a, b) => b.bonus - a.bonus)[0];
+  const teamsIn = ranked.filter(t => t.members > 0);
+  const master = teamsIn[0] || null;
+  const bonusTop = [...teamsIn].sort((a, b) => b.bonus - a.bonus)[0];
+  const bestTeam = bonusTop && bonusTop.bonus > 0 ? bonusTop : null;
   const speedKing = Object.entries(fastestCount).sort((a, b) => b[1] - a[1])[0];
   const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
-  // スマホには「発表中」とだけ出す（優勝者は最後の発表まで伏せる）
+  // スマホには「発表中」とだけ出す（優勝は最後の発表まで伏せる）
   await roomRef().child("meta").set({ state: "awards", qi, period });
   finalMeta = { state: "finished", qi, period,
-    champPid: champ ? champ.id : "", champTeam: bestTeam ? bestTeam.tid : "", audKingPid: audKing ? audKing.id : "", audKingPids: audKings.map(p => p.id) };
-  $("champView").innerHTML = champ ? `🏆 Galaxyマスター：${esc(champ.name)}さん` : "優勝者なし";
+    masterTeam: master ? master.tid : "", bestTeam: bestTeam ? bestTeam.tid : "", survPid: champ ? champ.id : "",
+    audKingPid: audKing ? audKing.id : "", audKingPids: audKings.map(p => p.id) };
+  $("champView").innerHTML = master ? `🏆 Galaxyマスター（優勝チーム）：${esc(master.name)}` : "優勝チームなし";
   $("awardList").innerHTML =
+    `🤝 ベストチーム賞（全員正解 ${bestTeam ? bestTeam.bonus : 0}回）：<b>${bestTeam ? esc(bestTeam.name) : "—"}</b><br>` +
     `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("") : "—"}</b><br>` +
-    `🤝 ベストチーム賞（${bestTeam ? bestTeam.points : 0}点）：<b>${bestTeam ? esc(bestTeam.name) : "—"}</b><br>` +
     `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) : "—"}</b><br>` +
-    `💪 団結賞（全員正解 ${bonusTop ? bonusTop.bonus : 0}回）：<b>${bonusTop && bonusTop.bonus > 0 ? esc(bonusTop.name) : "—"}</b>` +
+    `🎖 サバイバル王（最後まで生き残った人）：<b>${champ ? esc(champ.name) : "—"}</b>` +
     (periodWinners.length ? "<br><br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("<br>") : "");
   $("finalTeamBody").innerHTML = ranked.map((t, i) =>
     `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.points}<br><small>${tieNote(ranked, i)}</small></td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
   $("rankBody").innerHTML = arr.map((p, i) =>
     `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(teamName(p.team))}</td><td>${p.alive === false ? `第${(p.outAt ?? 0)+1}問で脱落` : "最後まで生存！"}</td><td>${p.score || 0}</td><td>${p.audPts || 0}</td></tr>`).join("");
-  // ===== 順番に発表する（4位以下まとめて → 3位 → 2位 → 1位 → Galaxyマスター） =====
-  const teamsIn = ranked.filter(t => t.members > 0);
+  // ===== 順番に発表する（個人賞 → 4位以下 → ベストチーム賞 → 3位 → 2位 → Galaxyマスター） =====
+  // call＝その発表に進むボタンの文字。最後に、各ボタンの文字を「次の発表」に合わせる
   awardSteps = [];
   awardSteps.push({ drum: 1200, html: `<div class="alabel">🎖 個人賞</div><div class="asub">` +
     `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("さん") : "該当なし"}</b><br>` +
     `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) + "さん" : "該当なし"}</b><br>` +
-    `💪 団結賞（全員正解 ${bonusTop ? bonusTop.bonus : 0}回）：<b>${bonusTop && bonusTop.bonus > 0 ? esc(bonusTop.name) : "該当なし"}</b>` +
-    (periodWinners.length ? "<br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("　") : "") + `</div>`,
-    btn: teamsIn.length > 3 ? "チーム順位（4位から）" : "チーム順位の発表へ" });
+    `🎖 サバイバル王（最後まで生き残った人）：<b>${champ ? esc(champ.name) + "さん" : "該当なし"}</b>` +
+    (periodWinners.length ? "<br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("　") : "") + `</div>` });
   if (teamsIn.length > 3) {
-    awardSteps.push({ drum: 800, html: `<div class="alabel">チーム順位　4位〜</div><div class="asub">` +
-      teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点${tieNote(teamsIn, i + 3)}`).join("<br>") + `</div>`, btn: "第3位の発表" });
+    awardSteps.push({ call: "チーム順位（4位から）", drum: 800, html: `<div class="alabel">チーム順位　4位〜</div><div class="asub">` +
+      teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点${tieNote(teamsIn, i + 3)}`).join("<br>") + `</div>` });
   }
-  const placeLabel = ["🥇 第1位　ベストチーム賞", "🥈 第2位", "🥉 第3位"];
-  for (let i = Math.min(3, teamsIn.length) - 1; i >= 0; i--) {
+  awardSteps.push({ call: "ベストチーム賞の発表", drum: 1400, confetti: !!bestTeam, html: `<div class="alabel">🤝 ベストチーム賞（全員正解がいちばん多いチーム）</div>` +
+    `<div class="aname">${bestTeam ? esc(bestTeam.name) : "該当なし"}</div><div class="asub">${bestTeam ? `全員正解 ${bestTeam.bonus}回` : ""}</div>` });
+  const placeLabel = ["", "🥈 第2位", "🥉 第3位"];
+  for (let i = Math.min(3, teamsIn.length) - 1; i >= 1; i--) {
     const t = teamsIn[i];
-    awardSteps.push({ drum: i === 0 ? 2200 : 1400, html: `<div class="alabel">${placeLabel[i]}</div><div class="aname">${esc(t.name)}</div><div class="asub">${t.points}点${tieNote(teamsIn, i)}</div>`,
-      btn: i === 0 ? "🏆 Galaxyマスターの発表！" : (i === 1 ? "第1位の発表" : "第2位の発表"), confetti: i === 0 });
+    awardSteps.push({ call: i === 2 ? "第3位の発表" : "第2位の発表", drum: 1400,
+      html: `<div class="alabel">${placeLabel[i]}</div><div class="aname">${esc(t.name)}</div><div class="asub">${t.points}点${tieNote(teamsIn, i)}</div>` });
   }
-  awardSteps.push({ drum: 2600, html: `<div class="alabel">🏆 Galaxyマスター（個人優勝）</div><div class="aname">${champ ? esc(champ.name) + "さん" : "該当なし"}</div><div class="asub">最後まで生き残った王者！</div>`, final: true });
+  awardSteps.push({ call: "🏆 Galaxyマスターの発表！", drum: 2600, final: true,
+    html: `<div class="alabel">🏆 第1位　Galaxyマスター（優勝チーム）</div><div class="aname">${master ? esc(master.name) : "該当なし"}</div><div class="asub">${master ? master.points + "点" + tieNote(teamsIn, 0) : ""}</div>` });
+  awardSteps.forEach((st, k) => { if (awardSteps[k + 1]) st.btn = awardSteps[k + 1].call; });
   awardIdx = 0;
   $("awardStage").innerHTML = `<div class="alabel">おつかれさまでした！ いよいよ結果発表です</div>`;
   $("awardNextBtn").textContent = "発表スタート！（個人賞から）";
