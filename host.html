@@ -1314,7 +1314,8 @@ async function finishGame() {
   const audNames = sfx => audKings.length ? audKings.map(p => esc(p.name) + sfx).join("・") : "";
   const teamsIn = ranked.filter(t => t.members > 0);
   const master = teamsIn[0] || null;
-  const bonusTop = [...teamsIn].sort((a, b) => b.bonus - a.bonus)[0];
+  // ベストチーム賞は優勝チーム（Galaxyマスター）以外から選ぶ（両方はとれない）。全員正解が同じ回数なら順位が上のチーム
+  const bonusTop = [...teamsIn.slice(1)].sort((a, b) => b.bonus - a.bonus)[0];
   const bestTeam = bonusTop && bonusTop.bonus > 0 ? bonusTop : null;
   const speedKing = Object.entries(fastestCount).sort((a, b) => b[1] - a[1])[0];
   const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
@@ -1346,7 +1347,7 @@ async function finishGame() {
     awardSteps.push({ call: "チーム順位（4位から）", drum: 800, html: `<div class="alabel">チーム順位　4位〜</div><div class="asub">` +
       teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点${tieNote(teamsIn, i + 3)}`).join("<br>") + `</div>` });
   }
-  awardSteps.push({ call: "ベストチーム賞の発表", drum: 1400, confetti: !!bestTeam, html: `<div class="alabel">🤝 ベストチーム賞（全員正解がいちばん多いチーム）</div>` +
+  awardSteps.push({ call: "ベストチーム賞の発表", drum: 1400, confetti: !!bestTeam, html: `<div class="alabel">🤝 ベストチーム賞（優勝チーム以外で、全員正解がいちばん多いチーム）</div>` +
     `<div class="aname">${bestTeam ? esc(bestTeam.name) : "該当なし"}</div><div class="asub">${bestTeam ? `全員正解 ${bestTeam.bonus}回` : ""}</div>` });
   const placeLabel = ["", "🥈 第2位", "🥉 第3位"];
   for (let i = Math.min(3, teamsIn.length) - 1; i >= 1; i--) {
