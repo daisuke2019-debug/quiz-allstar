@@ -324,7 +324,7 @@
     </div>
     <h2 style="margin-top:16px">♪ サウンド（このPC内の音源ファイルを選ぶ）</h2>
     <div id="soundPanel"></div>
-    <p class="note">音源はこのPCの中だけに保存されます（ネットには上がりません）。著作権フリーの音源かオリジナルの音を使ってください。相談・出題・正解発表・優勝に合わせて自動で鳴ります。入場BGMは右下のボタンで再生／停止します。</p>
+    <p class="note">音源はこのPCの中だけに保存されます（ネットには上がりません）。著作権フリーの音源かオリジナルの音を使ってください。出題・相談・回答時間・ドラムロール・正解発表・脱落・優勝に合わせて自動で鳴ります（相談と回答時間はくり返し、ドラムロールは未設定なら「ピッ」の音）。入場BGMは右下のボタンで再生／停止します。</p>
     <h2 style="margin-top:16px">③ 部屋を作る</h2>
     <div class="row"><button id="createRoom">部屋を作って参加者を待つ</button></div>
   </div>
@@ -673,9 +673,12 @@ function beep(freq, dur) {
 // ===== サウンド（このPC内のファイルだけを使う・IndexedDBに保存） =====
 const SOUNDS = [
   { key: "entrance", label: "入場BGM" },
-  { key: "consult", label: "相談タイム" },
-  { key: "think", label: "回答時間" },
+  { key: "jingle", label: "出題ジングル" },
+  { key: "consult", label: "相談タイム（くり返し）" },
+  { key: "think", label: "回答時間（くり返し）" },
+  { key: "drum", label: "ドラムロール（正解発表・表彰の前）" },
   { key: "correct", label: "正解発表" },
+  { key: "out", label: "脱落" },
   { key: "fanfare", label: "優勝・ピリオド優勝" }
 ];
 const soundUrls = {}, soundAudio = {};
@@ -722,6 +725,12 @@ function playSound(key, loop) {
   const a = soundAudio[key];
   if (!a) return;
   try { stopSound(key); a.loop = !!loop; a.currentTime = 0; a.play().catch(() => {}); } catch(e) {}
+}
+// ドラムロール：音源があればそれをくり返し、なければ今までの「ピッ」の音。止める関数を返す
+function startDrum(freq, dur, every) {
+  if (soundAudio.drum) { playSound("drum", true); return () => stopSound("drum"); }
+  const t = setInterval(() => beep(freq, dur), every);
+  return () => clearInterval(t);
 }
 function stopAllSounds() { SOUNDS.forEach(s => stopSound(s.key)); }
 function renderSoundPanel() {
@@ -1085,6 +1094,7 @@ $("askBtn").onclick = async () => {
   if (qi + 1 >= questions.length) return;
   if (pingNonce) { if (pingRef && pingFn) pingRef.off("value", pingFn); pingRef = null; pingFn = null; pingNonce = ""; pingResp = {}; $("pingCard").classList.add("hidden"); }
   qi++;
+  playSound("jingle");
   curAuto = isAuto();
   if (curAuto) {
     const pl = planOf(period);
@@ -1130,7 +1140,7 @@ async function startConsult() {
   $("readingMsg").classList.add("hidden");
   $("consultArea").classList.remove("hidden");
   $("consultDoneBtn").classList.add("hidden");
-  playSound("consult");
+  playSound("consult", true);
   clearInterval(timerInt);
   timerInt = setInterval(() => {
     const left = Math.max(0, localEnd - performance.now());
@@ -1156,7 +1166,7 @@ async function beginAnswer() {
   $("startAnsBtn").classList.add("hidden");
   $("ringWrap").classList.remove("hidden");
   $("revealBtn").classList.add("hidden");
-  playSound("think");
+  playSound("think", true);
   await roomRef().child("meta").set({ state: "question", qi, startAt: curQStart, endsAt: curEndsAt, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, pname: curAuto ? planOf(period).name : "" });
   answerStarted = true;
   setNext(null, "回答時間中…（締切後に「正解発表！」が光ります）");
@@ -1240,9 +1250,9 @@ $("revealBtn").onclick = async () => {
   // ② 「ため」の演出
   const panels = [0,1,2,3].map(j => $("ch" + j)).filter(Boolean);
   panels.forEach(p => p.classList.add("suspense"));
-  const tick = setInterval(() => beep(150, 0.05), 110);
+  const endDrum = startDrum(150, 0.05, 110);
   await sleep(1800);
-  clearInterval(tick);
+  endDrum();
   panels.forEach(p => p.classList.remove("suspense"));
 
   // ③ 採点
@@ -1361,6 +1371,7 @@ $("revealBtn").onclick = async () => {
   }).filter(Boolean).join("<br>");
   if (finalRevive) showTicker("全員脱落！ 次の問題から全員復活して続けます！"); else showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
   playSound("correct");
+  if (newlyOut.length && !finalRevive) setTimeout(() => playSound("out"), 1200);
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
   const allOutNow = eligibleList.length > 0 && eligibleList.length === newlyOut.length;
   if (qi + 1 >= questions.length) { $("finishBtn").classList.remove("hidden"); setNext("finishBtn", "結果発表へ"); }
@@ -1592,9 +1603,9 @@ $("awardNextBtn").onclick = async () => {
   $("awardNextBtn").classList.add("hidden");
   setNext(null, "発表中…");
   $("awardStage").innerHTML = `<div class="drum">🥁 ・・・</div>`;
-  const tick = setInterval(() => beep(140, 0.04), 90);
+  const endDrum = startDrum(140, 0.04, 90);
   await sleep(st.drum);
-  clearInterval(tick);
+  endDrum();
   $("awardStage").innerHTML = st.html;
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
   if (st.confetti) launchConfetti();
