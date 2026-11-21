@@ -163,7 +163,10 @@
   /* 次に押すボタン */
   button.next { outline: 3px solid #fff; outline-offset: 3px; animation: nextGlow .9s ease-in-out infinite alternate; }
   @keyframes nextGlow { from { box-shadow: 0 0 8px rgba(79,210,255,.5); } to { box-shadow: 0 0 36px 10px rgba(79,210,255,.95); } }
-  #nextHint { position: fixed; left: 14px; bottom: 62px; z-index: 75; background: rgba(2,10,36,.94); border: 1px solid var(--cyan); border-radius: 999px; padding: 7px 18px; font-size: 17px; color: var(--ice); box-shadow: 0 0 16px rgba(79,210,255,.4); }
+  /* 「次は」の案内：ふだんは光っているボタンのすぐ横に入る。ボタンがないときだけ左下に浮かせる */
+  #nextHint { display: inline-block; vertical-align: middle; }
+  #nextHint.floating { position: fixed; left: 14px; bottom: 62px; z-index: 75; }
+  #nextHint { background: rgba(2,10,36,.94); border: 1px solid var(--cyan); border-radius: 999px; padding: 7px 18px; font-size: 17px; color: var(--ice); box-shadow: 0 0 16px rgba(79,210,255,.4); }
   #nextHint b { color: var(--cyan); }
   /* 得点2倍 */
   .dblBadge { display: inline-block; background: linear-gradient(90deg, #ff5f7a, #ffb000); color: #fff; font-weight: bold; border-radius: 999px; padding: 6px 22px; font-size: 26px; animation: pulse .6s infinite alternate; }
@@ -205,8 +208,8 @@
     .stageMain:has(#revealArea:not(.hidden)) .choices { grid-template-columns: repeat(4, 1fr); }
     .stageMain:has(#revealArea:not(.hidden)) .choice { min-height: 70px; font-size: 22px; padding: 12px 14px; }
     .stageMain:has(#revealArea:not(.hidden)) .choice .cnt { position: static; transform: none; display: block; font-size: 30px; text-align: right; }
-    /* 次に押すボタンは、いつも画面の下に見えるようにする */
-    .stageMain > .row:last-child { position: sticky; bottom: 6px; z-index: 5; margin-top: 8px !important; }
+    /* 次に押すボタンは、いつも画面の下（脱落者の帯の上）に見えるようにする */
+    .stageMain > #actionRow { position: sticky; bottom: 56px; z-index: 5; margin-top: auto !important; padding-top: 8px; min-height: 58px; }
     #revealArea .dist { grid-row: 1 / span 3; }
   }
   /* 横長で高さが低い画面（1366×768・1280×800など） */
@@ -231,7 +234,13 @@
   /* ===== 投影用デザイン（横長の画面）：問題と4択で画面の高さいっぱいを使う ===== */
   @media (min-width: 1200px) {
     .wrap { padding-bottom: 8px; }
-    .stageMain { display: flex; flex-direction: column; min-height: calc(100vh - 150px); }
+    /* パネルは下の帯の直前まで伸ばす（高さはJSの fitStage() で画面に合わせる） */
+    #stageCard { min-height: var(--stageH, calc(100vh - 150px)); }
+    .stageMain { display: flex; flex-direction: column; align-self: stretch; min-height: 0; }
+    .stageSide { align-self: stretch; display: flex; flex-direction: column; min-height: 0; max-height: calc(var(--stageH, 100vh) - 30px); }
+    .stageSide .sideMon { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+    .stageSide td, .stageSide th { padding: 3px 8px; font-size: 15px; }
+    #consultArea:not(.hidden) { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; }
     /* 出題前：画面のまん中に、次の問題の案内と「出題する！」を大きく */
     #prepArea:not(.hidden) { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
     #prepArea #askBtn { font-size: 30px; padding: 18px 64px; }
@@ -311,7 +320,7 @@
       <span>相談タイム：
         <select id="consultSel"><option>30</option><option selected>45</option><option>60</option></select> 秒
       </span>
-      <span>全員正解ボーナス： +<select id="bonusSel"><option>1</option><option>2</option><option selected>3</option><option>5</option></select> 点</span>
+      <span>全員正解ボーナス： +<select id="bonusSel"><option>1</option><option>2</option><option selected>3</option><option>5</option></select> 点（生き残り2人以上のチームだけ）</span>
     </div>
     <h2 style="margin-top:16px">♪ サウンド（このPC内の音源ファイルを選ぶ）</h2>
     <div id="soundPanel"></div>
@@ -391,7 +400,6 @@
     <div id="consultArea" class="hidden">
       <div class="consult">🗣 相談タイム！チームで話し合おう</div>
       <div class="timer" id="consultTimer"></div>
-      <div class="row" style="justify-content:center"><button id="consultDoneBtn" class="hidden">回答スタート！</button></div>
     </div>
 
     <div id="questionArea" class="hidden">
@@ -400,7 +408,6 @@
       <div class="ringwrap hidden" id="ringWrap"><svg viewBox="0 0 120 120"><circle class="ringbg" cx="60" cy="60" r="52"></circle><circle class="ringfg" id="ringFg" cx="60" cy="60" r="52"></circle></svg><div class="timer ringnum" id="timerView"></div></div>
       <p style="text-align:center;color:var(--muted)" id="ansCount"></p>
       <div class="choices" id="choiceGrid"></div>
-      <div class="row" style="justify-content:center"><button id="startAnsBtn" class="hidden">回答スタート！</button></div>
     </div>
 
     <div id="revealArea" class="hidden">
@@ -412,7 +419,10 @@
       <div class="gainlist" id="gainList"></div>
     </div>
 
-    <div class="row" style="justify-content:center;margin-top:16px">
+    <!-- 押すボタンは、すべてここ（左の列のいちばん下）に出す。「次は」の案内もボタンのすぐ横に入る -->
+    <div class="row" id="actionRow" style="justify-content:center;margin-top:16px">
+      <button id="startAnsBtn" class="hidden">回答スタート！</button>
+      <button id="consultDoneBtn" class="hidden">回答スタート！</button>
       <button id="revealBtn" class="hidden">正解発表！</button>
       <button id="nextBtn" class="hidden">次の問題へ</button>
       <button id="periodEndBtn" class="hidden">ピリオド結果へ（全員復活）</button>
@@ -421,15 +431,26 @@
    </div>
    <div class="stageSide">
     <div class="sideMon">
-      <div class="monHead"><span>👥 参加者モニター <span id="proxyHint" class="note"></span></span><span id="monSum"></span></div>
+      <div class="monHead"><span>👥 参加者モニター <span id="proxyHint" class="note"></span></span><span id="monSum"></span><button class="sub2" id="monAllBtn" style="font-size:13px;padding:4px 12px">全員表示</button></div>
+      <div class="note" id="monFilterNote"></div>
       <div class="monitor" id="monitor"></div>
       <div class="pingNg" id="noAnsView" style="font-size:17px;margin-top:6px"></div>
     </div>
 
     <h2 style="margin-top:14px">チーム順位</h2>
     <table><thead><tr><th>順位</th><th>チーム</th><th>点数</th><th>全員正解</th><th>残り人数</th></tr></thead><tbody id="standBody"></tbody></table>
-    <div class="row" style="justify-content:flex-end"><button class="sub2" id="earlyFinishBtn">ここで結果発表へ進む</button></div>
+    <div class="row" style="justify-content:flex-end"><button class="sub2" id="abortBtn">⏸ クイズを中断する</button><button class="sub2" id="earlyFinishBtn">ここで結果発表へ進む</button></div>
    </div>
+  </div>
+
+  <!-- 中断 -->
+  <div class="card hidden" id="abortCard" style="text-align:center">
+    <h2>⏸ クイズを中断しました</h2>
+    <p style="font-size:20px;margin:10px 0">参加者のスマホには「クイズは中断されました」と出ています。点数と参加者はそのまま残っています。</p>
+    <div class="row" style="justify-content:center;margin-top:14px">
+      <button id="resumeBtn">中断をやめて続ける</button>
+      <button class="sub2" id="abortCloseBtn">部屋を閉じて最初から（参加者のデータを削除）</button>
+    </div>
   </div>
 
   <!-- 結果 -->
@@ -496,7 +517,20 @@ function setNext(target, hint) {
   if (!hint) { h.classList.add("hidden"); return; }
   h.innerHTML = "▶ 次は：<b>" + hint + "</b>";
   h.classList.remove("hidden");
+  // 案内は光らせたボタンのすぐ横に置く。ボタンがないとき：出題画面なら左下のボタンの場所、それ以外は画面の左下
+  const stageOn = !$("stageCard").classList.contains("hidden");
+  if (el && el.parentElement) { el.parentElement.insertBefore(h, el); h.classList.remove("floating"); }
+  else if (stageOn) { $("actionRow").prepend(h); h.classList.remove("floating"); }
+  else { document.body.appendChild(h); h.classList.add("floating"); }
 }
+// 出題画面のパネルを、下の帯（脱落者の名前が流れる帯）の直前まで伸ばす
+function fitStage() {
+  const c = $("stageCard");
+  if (c.classList.contains("hidden") || innerWidth < 1200) { c.style.removeProperty("--stageH"); return; }
+  const top = c.getBoundingClientRect().top + scrollY;
+  c.style.setProperty("--stageH", Math.max(420, innerHeight - top - 50 - 8) + "px");
+}
+addEventListener("resize", fitStage);
 
 const DEFAULT_TEAMS = ["チームA","チームB","チームC","チームD","チームE","チームF","チームG"];
 const DEFAULT_QS = [
@@ -599,7 +633,7 @@ $("importFile").onchange = e => {
 };
 
 let pin = null, qi = -1, timerInt = null, playersCache = {}, teamState = {}, curMode = "survival";
-let curQStart = 0, curEndsAt = 0, curSecs = 15, fastestCount = {};
+let curQStart = 0, curEndsAt = 0, curSecs = 15, fastestCount = {}, fastestTime = {};
 let period = 1, periodWinners = [], periodDirty = false, liveOff = [], curDbl = false, pendingRemove = { pid: "", t: 0 };
 // ===== ピリオド進行（説明資料どおり）=====
 // 毎問：正解した人数分＋生き残り全員正解でボーナスがチーム点。まちがい・未回答でライフ-1、ライフ0で脱落。
@@ -734,6 +768,7 @@ $("createRoom").onclick = async () => {
   const teamsObj = {}, stateObj = {};
   teams.forEach((t, i) => { teamsObj["t" + i] = { name: t }; stateObj["t" + i] = { points: 0, bonus: 0 }; });
   await roomRef().set({ meta: { state: "lobby", qi: -1, period: 1 }, teams: teamsObj, teamState: stateObj, notice: $("noticeSel").value, createdAt: Date.now() });
+  hostBeat(); clearInterval(hostHbInt); hostHbInt = setInterval(hostBeat, 10000);
   $("pinView").textContent = pin;
   $("setupCard").classList.add("hidden");
   $("lobbyCard").classList.remove("hidden");
@@ -807,6 +842,10 @@ function renderMonitor() {
   const cnt = { ok: 0, warn: 0, off: 0 };
   let need = 0, got = 0;
   const noAns = [];
+  // 出題画面では「要対応の人」（通信の不調・締切後の未回答・脱落）だけを出す。接続チェック中と「全員表示」のときは全員
+  const stageOn = !$("stageCard").classList.contains("hidden");
+  const filterOn = stageOn && !pingNonce && !monShowAll;
+  let shownN = 0;
   box.innerHTML = arr.map(([pid, p]) => {
     const st = connStatus(p);
     cnt[st]++;
@@ -821,6 +860,8 @@ function renderMonitor() {
       else if (answerClosed && elig) { cls.push("noans"); mark = " ✕"; noAns.push(p.name); }
     }
     if (p.alive === false) cls.push("out");
+    if (filterOn && st === "ok" && p.alive !== false && !cls.includes("noans")) return "";
+    shownN++;
     const man = (curAnsSet[pid] && curAnsSet[pid].manual) || (curPredSet[pid] && curPredSet[pid].manual) ? "(代)" : "";
     return `<span class="${cls.join(" ")}" data-mpid="${pid}">${connIcon(p)} ${esc(p.name)}${mark}${man}</span>`;
   }).join("");
@@ -830,7 +871,14 @@ function renderMonitor() {
   if (canProxy) box.querySelectorAll("[data-mpid]").forEach(c => c.onclick = () => openProxy(c.dataset.mpid));
   $("monSum").innerHTML = `🟢 <b>${cnt.ok}</b>　🟡 <b>${cnt.warn}</b>　🔴 <b>${cnt.off}</b>` + (qi >= 0 && !pingNonce ? `　｜　回答 <b>${got}</b> ／ ${need}人` : "");
   $("noAnsView").textContent = answerClosed && noAns.length ? `未回答（または届いていない）：${noAns.join("、")}` : "";
+  $("monAllBtn").classList.toggle("hidden", !stageOn || !!pingNonce);
+  $("monAllBtn").textContent = monShowAll ? "要対応だけ" : "全員表示";
+  $("monFilterNote").textContent = filterOn
+    ? (shownN ? `要対応の人だけ表示中（${shownN}人）：通信の不調・締切後の未回答・脱落` : "✅ 要対応の人はいません（全員表示で全員を見られます）")
+    : "";
 }
+let monShowAll = false;
+$("monAllBtn").onclick = () => { monShowAll = !monShowAll; renderMonitor(); };
 // ===== 代理回答（スマホが使えない人の答えを司会が入れる） =====
 let answerStarted = false, revealed = false, proxyPid = "";
 function proxyAllowed() { return qi >= 0 && answerStarted && !revealed && !pingNonce; }
@@ -977,6 +1025,7 @@ $("startGame").onclick = () => {
   qi = -1;
   renderSurv();
   showPrep();
+  renderMonitor();
 };
 
 function showPrep() {
@@ -986,8 +1035,9 @@ function showPrep() {
     $("qNum").textContent = `次の問題：${periodName(period)} ${k}問目` + (pl.last ? "" : `／${pl.n}問`) + `（全体の第${qi+2}問 ／ 全${questions.length}問）`
       + `　ライフ${pl.lives}` + (pl.consult ? `・相談${AUTO_CONSULT}秒` : "") + (pl.dbl ? "・🔥得点2倍" : "");
   } else $("qNum").textContent = `次の問題：第${qi+2}問 ／ 全${questions.length}問`;
-  ["consultArea","questionArea","revealArea","revealBtn","nextBtn","finishBtn","periodEndBtn"].forEach(id => $(id).classList.add("hidden"));
+  ["consultArea","questionArea","revealArea","startAnsBtn","consultDoneBtn","revealBtn","nextBtn","finishBtn","periodEndBtn"].forEach(id => $(id).classList.add("hidden"));
   $("prepArea").classList.remove("hidden");
+  fitStage();
   $("askBtn").disabled = qi + 1 >= questions.length;
   // 最終ピリオドには「次のピリオド」がないので、ピリオドを終えるボタンは出さない
   $("periodBtn").classList.toggle("hidden", !periodDirty || (isAuto() && !!planOf(period).last));
@@ -1091,7 +1141,7 @@ async function startConsult() {
   }, 100);
 }
 $("startAnsBtn").onclick = () => { $("startAnsBtn").classList.add("hidden"); if (curConsult) startConsult(); else beginAnswer(); };
-$("consultDoneBtn").onclick = () => { $("consultArea").classList.add("hidden"); stopSound("consult"); beginAnswer(); };
+$("consultDoneBtn").onclick = () => { $("consultDoneBtn").classList.add("hidden"); $("consultArea").classList.add("hidden"); stopSound("consult"); beginAnswer(); };
 
 async function beginAnswer() {
   const q = questions[qi];
@@ -1161,6 +1211,7 @@ $("revealBtn").onclick = async () => {
   $("revealBtn").classList.add("hidden");
   $("proxyPanel").classList.add("hidden");
   revealed = true;
+  revealBusy = true;
   setNext(null, "発表中…");
   renderMonitor();
   stopSound("think"); stopSound("consult");
@@ -1236,8 +1287,9 @@ $("revealBtn").onclick = async () => {
       if (curDbl) g.pts *= 2;
     } else {
       g.pts = g.correct;
+      // 全員正解ボーナスは、生き残りが2人以上いて、その全員が正解したときだけ（2026-11-21 BOARD決定）
       const aliveMembers = Object.entries(playersCache).filter(([, p]) => p.team === tid && p.alive !== false);
-      if (aliveMembers.length > 0 && aliveMembers.every(([pid]) => answers[pid] && answers[pid].choice === q.correct)) {
+      if (aliveMembers.length >= 2 && aliveMembers.every(([pid]) => answers[pid] && answers[pid].choice === q.correct)) {
         g.bonus = true; g.pts += bonusPts;
       }
     }
@@ -1248,7 +1300,10 @@ $("revealBtn").onclick = async () => {
     if (g.tCnt) { updates[`teamState/${tid}/tSum`] = +((st.tSum || 0) + g.tSum).toFixed(2); updates[`teamState/${tid}/tCnt`] = (st.tCnt || 0) + g.tCnt; }
   });
   speed.sort((a, b) => a.sec - b.sec);
-  if (speed[0]) fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
+  if (speed[0]) {
+    fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
+    fastestTime[speed[0].pid] = (fastestTime[speed[0].pid] || 0) + speed[0].sec; // 最速王が同じ回数で並んだときに使う
+  }
   periodDirty = true;
   // 最終ピリオドで全員脱落したら、次の問題の前に全員復活して最終を続ける（最後まで逆転のチャンスを残す）
   // 全員脱落したら、ピリオドを終えずに次の問題から全員復活して続ける（ピリオドの最後の問題なら「ピリオド結果へ」で復活）
@@ -1256,7 +1311,9 @@ $("revealBtn").onclick = async () => {
   // 保存はうしろで行い、大画面の発表は待たせない（回線が遅くても止まらない）
   roomRef().update(updates)
     .then(() => roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode, lives: curLives, auto: curAuto, reviveAll: finalRevive }))
-    .catch(() => { $("offView").textContent = "⚠️ 結果の保存に失敗しました。ネット接続を確認してください"; });
+    .catch(() => { $("offView").textContent = "⚠️ 結果の保存に失敗しました。ネット接続を確認してください"; })
+    .finally(() => { revealBusy = false; });
+  setTimeout(() => { revealBusy = false; }, 8000); // 回線が切れて保存が終わらなくても、中断はできるようにする
 
   // ④ 正解の発表
   counts.forEach((n, j) => { if (j !== q.correct) $("ch" + j).classList.add("dim"); });
@@ -1337,6 +1394,56 @@ function twoStep(btn, armedLabel, action) {
 }
 $("earlyFinishBtn").onclick = () => twoStep($("earlyFinishBtn"), "⚠️ もう一度押すと結果発表へ（5秒以内）", finishGame);
 
+// ===== 中断（2026-11-21 BOARD決定③A）：スマホに「中断されました」と出す。点数と参加者は残す =====
+let abortSaved = null, revealBusy = false;
+$("abortBtn").onclick = () => {
+  if (revealBusy) return; // 正解発表の途中は中断しない（発表が終わってから）
+  twoStep($("abortBtn"), "⚠️ もう一度押すと中断（5秒以内）", abortQuiz);
+};
+async function abortQuiz() {
+  // 出題の途中（まだ正解発表していない）なら、続けるときにこの問題を最初から出し直す
+  const midQ = qi >= 0 && !revealed && $("prepArea").classList.contains("hidden");
+  let prevMeta = null;
+  try { prevMeta = (await Promise.race([roomRef().child("meta").once("value"), sleep(3000).then(() => null)]))?.val() || null; } catch (e) {}
+  abortSaved = { midQ, meta: prevMeta || { state: "lobby", qi, period } };
+  clearInterval(timerInt); stopAllSounds(); liveOff.forEach(f => f()); liveOff = [];
+  showTicker(""); $("proxyPanel").classList.add("hidden");
+  $("stageCard").classList.add("hidden");
+  $("abortCard").classList.remove("hidden");
+  setNext("resumeBtn", "続けるときは「中断をやめて続ける」");
+  await roomRef().child("meta").set({ state: "aborted", qi, period });
+}
+$("resumeBtn").onclick = async () => {
+  const s = abortSaved || { midQ: false, meta: { state: "lobby", qi, period } };
+  abortSaved = null;
+  $("abortCard").classList.add("hidden");
+  $("stageCard").classList.remove("hidden");
+  if (s.midQ) {
+    // 途中だった問題の回答を消して、出題前の画面に戻す（ライフや点数は、正解発表前なので変わっていない）
+    await roomRef().child("answers/" + qi).remove();
+    await roomRef().child("predictions/" + qi).remove();
+    qi--;
+    curAnsSet = {}; curPredSet = {}; answerStarted = false; answerClosed = false;
+    await roomRef().child("meta").set({ state: "lobby", qi, period });
+    showPrep();
+  } else {
+    // 正解発表のあと・出題前に中断したときは、そのときの画面に戻す
+    await roomRef().child("meta").set(s.meta);
+    if (!$("prepArea").classList.contains("hidden")) setPrepNext();
+    else {
+      const b = ["nextBtn", "periodEndBtn", "finishBtn"].find(id => !$(id).classList.contains("hidden"));
+      setNext(b || null, b ? $(b).textContent : "");
+    }
+    fitStage();
+  }
+  renderMonitor();
+};
+$("abortCloseBtn").onclick = () => twoStep($("abortCloseBtn"), "⚠️ もう一度押すと部屋を閉じます（データ削除・5秒以内）", () => $("resetBtn").onclick());
+
+// ===== 司会画面の見張り（決定③B）：司会画面が開いている間、10秒ごとに合図を送る。スマホは合図が長く止まったときだけ知らせる =====
+let hostHbInt = null;
+function hostBeat() { if (pin && db) roomRef().child("host").set({ hb: firebase.database.ServerValue.TIMESTAMP }).catch(() => {}); }
+
 // ===== ピリオド =====
 function periodWinner() {
   const arr = Object.entries(playersCache).map(([pid, p]) => ({ pid, ...p })).filter(p => (p.pScore || 0) > 0);
@@ -1394,8 +1501,9 @@ async function finishGame() {
     return (b.pScore || 0) - (a.pScore || 0) || (a.pTime || 0) - (b.pTime || 0);
   });
   // 資料どおり：Galaxyマスター＝優勝チーム（チーム1位）／ベストチーム賞＝全員正解がいちばん多いチーム
-  // 最後まで生き残った人は「サバイバル王」として個人賞で紹介する
-  const champ = arr[0] || null; // サバイバル王
+  // サバイバル王は1人だけ：最終ピリオドの正解数がいちばん多い人。同じなら正解までの時間の合計が短い人（2026-11-21 BOARD決定⑧）
+  // （ピリオドごとの正解数・時間は、ピリオドの始めに0に戻るので、ここでの値は最終ピリオドのもの）
+  const champ = periodWinner(); // サバイバル王
   const audKings = audKingList(arr);
   const audKing = audKings[0] || null;
   const audNames = sfx => audKings.length ? audKings.map(p => esc(p.name) + sfx).join("・") : "";
@@ -1404,32 +1512,41 @@ async function finishGame() {
   // ベストチーム賞は優勝チーム（Galaxyマスター）以外から選ぶ（両方はとれない）。全員正解が同じ回数なら順位が上のチーム
   const bonusTop = [...teamsIn.slice(1)].sort((a, b) => b.bonus - a.bonus)[0];
   const bestTeam = bonusTop && bonusTop.bonus > 0 ? bonusTop : null;
-  const speedKing = Object.entries(fastestCount).sort((a, b) => b[1] - a[1])[0];
+  // 最速王：いちばん早い正解の回数が多い人。同じ回数なら、その正解までの時間の合計が短い1人（決定⑧）
+  const speedKing = Object.entries(fastestCount).sort((a, b) => b[1] - a[1] || (fastestTime[a[0]] || 0) - (fastestTime[b[0]] || 0))[0];
+  const speedTie = speedKing ? Object.values(fastestCount).filter(n => n === speedKing[1]).length > 1 : false;
+  const SURV_RULE = "最終ピリオドの正解数がいちばん多い人（同じなら、正解までの時間の合計が短い人）";
+  const SPEED_RULE = "いちばん早く正解した回数がいちばん多い人（同じなら、その正解までの時間の合計が短い人）";
   const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
   // スマホには「発表中」とだけ出す（優勝は最後の発表まで伏せる）
   await roomRef().child("meta").set({ state: "awards", qi, period });
   finalMeta = { state: "finished", qi, period,
-    masterTeam: master ? master.tid : "", bestTeam: bestTeam ? bestTeam.tid : "", survPid: champ ? champ.id : "",
+    masterTeam: master ? master.tid : "", bestTeam: bestTeam ? bestTeam.tid : "", survPid: champ ? champ.pid : "",
     audKingPid: audKing ? audKing.id : "", audKingPids: audKings.map(p => p.id) };
   $("champView").innerHTML = master ? `🏆 Galaxyマスター（優勝チーム）：${esc(master.name)}` : "優勝チームなし";
   $("awardList").innerHTML =
     `🤝 ベストチーム賞（全員正解 ${bestTeam ? bestTeam.bonus : 0}回）：<b>${bestTeam ? esc(bestTeam.name) : "—"}</b><br>` +
     `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("") : "—"}</b><br>` +
     `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) : "—"}</b><br>` +
-    `🎖 サバイバル王（最後まで生き残った人）：<b>${champ ? esc(champ.name) : "—"}</b>` +
+    `🎖 サバイバル王（最終ピリオド 正解${champ ? champ.pScore : 0}問）：<b>${champ ? esc(champ.name) : "—"}</b>` +
     (periodWinners.length ? "<br><br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("<br>") : "");
   $("finalTeamBody").innerHTML = ranked.map((t, i) =>
     `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.points}<br><small>${tieNote(ranked, i)}</small></td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
   $("rankBody").innerHTML = arr.map((p, i) =>
     `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(teamName(p.team))}</td><td>${p.alive === false ? `第${(p.outAt ?? 0)+1}問で脱落` : "最後まで生存！"}</td><td>${p.score || 0}</td><td>${p.audPts || 0}</td></tr>`).join("");
-  // ===== 順番に発表する（個人賞 → 4位以下 → ベストチーム賞 → 3位 → 2位 → Galaxyマスター） =====
+  // ===== 順番に1つずつ発表する（2026-11-21 BOARD決定⑨）=====
+  // 観客王 → 最速王 → サバイバル王 → 4位〜 → ベストチーム賞 → 3位 → 2位 → Galaxyマスター
+  // ピリオドの優勝者は、各ピリオドの終わりにその場で発表するので、ここでは発表しない
   // call＝その発表に進むボタンの文字。最後に、各ボタンの文字を「次の発表」に合わせる
   awardSteps = [];
-  awardSteps.push({ drum: 1200, html: `<div class="alabel">🎖 個人賞</div><div class="asub">` +
-    `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("さん") : "該当なし"}</b><br>` +
-    `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) + "さん" : "該当なし"}</b><br>` +
-    `🎖 サバイバル王（最後まで生き残った人）：<b>${champ ? esc(champ.name) + "さん" : "該当なし"}</b>` +
-    (periodWinners.length ? "<br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("　") : "") + `</div>` });
+  awardSteps.push({ call: "🔮 観客王の発表", drum: 1400, confetti: !!audKing, html: `<div class="alabel">🔮 観客王（脱落中の予想投票がいちばん当たった人）</div>` +
+    `<div class="aname">${audKing ? audNames("さん") : "該当なし"}</div><div class="asub">${audKing ? `予想的中 <b>${audKing.audPts}回</b>` : ""}</div>` });
+  awardSteps.push({ call: "⚡ 最速王の発表", drum: 1400, confetti: !!kingPlayer, html: `<div class="alabel">⚡ 最速王</div>` +
+    `<div class="aname">${kingPlayer ? esc(kingPlayer.name) + "さん" : "該当なし"}</div>` +
+    `<div class="asub">${speedKing ? `いちばん早い正解 <b>${speedKing[1]}回</b>` + (speedTie ? `（同じ回数の人がいたため、時間の合計 <b>${(fastestTime[speedKing[0]] || 0).toFixed(2)}秒</b> で決定）` : "") + "<br>" : ""}<small>決め方：${SPEED_RULE}</small></div>` });
+  awardSteps.push({ call: "🎖 サバイバル王の発表", drum: 1800, confetti: !!champ, html: `<div class="alabel">🎖 サバイバル王</div>` +
+    `<div class="aname">${champ ? esc(champ.name) + "さん" : "該当なし"}</div>` +
+    `<div class="asub">${champ ? `最終ピリオド 正解 <b>${champ.pScore}問</b> ／ 正解までの時間の合計 <b>${(+champ.pTime || 0).toFixed(2)}秒</b><br>` : ""}<small>決め方：${SURV_RULE}</small></div>` });
   if (teamsIn.length > 3) {
     awardSteps.push({ call: "チーム順位（4位から）", drum: 800, html: `<div class="alabel">チーム順位　4位〜</div><div class="asub">` +
       teamsIn.slice(3).map((t, i) => `${i + 4}位　${esc(t.name)}　${t.points}点${tieNote(teamsIn, i + 3)}`).join("<br>") + `</div>` });
@@ -1447,7 +1564,7 @@ async function finishGame() {
   awardSteps.forEach((st, k) => { if (awardSteps[k + 1]) st.btn = awardSteps[k + 1].call; });
   awardIdx = 0;
   $("awardStage").innerHTML = `<div class="alabel">おつかれさまでした！ いよいよ結果発表です</div>`;
-  $("awardNextBtn").textContent = "発表スタート！（個人賞から）";
+  $("awardNextBtn").textContent = "発表スタート！（観客王から）";
   $("awardNextBtn").classList.remove("hidden");
   $("podiumFinal").classList.add("hidden");
   $("resetRow").classList.add("hidden");
@@ -1511,6 +1628,7 @@ function launchConfetti() {
   }
 }
 $("resetBtn").onclick = async () => {
+  clearInterval(hostHbInt); // 消したあとに合図で部屋が作り直されないように
   if (pin) await roomRef().remove();
   location.reload();
 };

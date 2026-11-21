@@ -89,6 +89,7 @@
 <body>
   <h1 class="logo"><span class="brand">Samsung Galaxy</span>感謝祭</h1>
   <div id="configWarn" class="warn hidden">Firebaseの設定がまだ貼られていません。主催者に確認してください。</div>
+  <div id="hostWarn" class="warn hidden" style="font-size:17px;text-align:center;line-height:1.6;position:relative;z-index:2"></div>
 
   <!-- 参加 -->
   <div class="card" id="joinCard">
@@ -268,7 +269,7 @@ function show(id) {
 }
 
 // ===== 接続の見える化 =====
-let connected = false, hbInt = null;
+let connected = false, hbInt = null, hostWatchInt = null;
 function renderConn() {
   const d = $("connDot");
   d.classList.remove("hidden");
@@ -391,6 +392,24 @@ function watch() {
   });
   clearInterval(hbInt);
   hbInt = setInterval(heartbeat, 10000);
+  // 司会画面の見張り（決定③B）：司会画面は10秒ごとに合図を送る。
+  // 一瞬切れただけでは何もしない。1分止まったら「待っててね」、10分止まったら「終わったかも」と知らせる
+  let hostHb = 0;
+  listen(room.child("host/hb"), s => { hostHb = s.val() || 0; checkHost(); });
+  clearInterval(hostWatchInt);
+  hostWatchInt = setInterval(checkHost, 5000);
+  offs.push(() => { clearInterval(hostWatchInt); $("hostWarn").classList.add("hidden"); });
+  function checkHost() {
+    const w = $("hostWarn");
+    // 自分の通信が切れているときは、自分側の表示（右上の赤）に任せる。古い司会画面（合図なし）の部屋では何もしない
+    if (!connected || !hostHb) { w.classList.add("hidden"); return; }
+    const gone = now() - hostHb;
+    if (gone < 60000) { w.classList.add("hidden"); return; }
+    w.innerHTML = gone < 600000
+      ? "⏳ 司会の画面と通信できていません。<br>このまま待っててね（自動で戻ります）"
+      : "⏸ 司会の画面が10分以上止まっています。<br>クイズが終わったか、中断しているかもしれません。スタッフの案内に従ってね";
+    w.classList.remove("hidden");
+  }
   listen(room.child("players/" + myId), s => {
     const p = s.val();
     if (!p) {
@@ -439,6 +458,16 @@ function watch() {
       currentQi = meta.qi; picked = -1; predicted = -1;
     }
     if (meta.state === "lobby") { show("waitCard"); return; }
+
+    // 司会がクイズを中断した（2026-11-21 BOARD決定③A）。再開されたら、自動でもとの画面に戻る
+    if (meta.state === "aborted") {
+      clearInterval(timerInt);
+      $("resultMsg").classList.remove("win");
+      $("resultMsg").textContent = "⏸ クイズは中断されました";
+      $("resultSub").textContent = "スタッフの案内に従ってね。再開したら、この画面が自動で切り替わります";
+      show("resultCard");
+      return;
+    }
 
     if (meta.state === "ping") {
       clearInterval(timerInt);
