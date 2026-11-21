@@ -1278,7 +1278,13 @@ $("revealBtn").onclick = async () => {
     const p = playersCache[pid];
     if (!p || eligible(p) || !inTime(pr)) return;
     predN++;
-    if (pr.choice === q.correct) { predHit++; updates[`players/${pid}/audPts`] = (p.audPts || 0) + 1; }
+    if (pr.choice === q.correct) {
+      predHit++;
+      updates[`players/${pid}/audPts`] = (p.audPts || 0) + 1;
+      // 観客王が同じ回数で並んだときに使う：当たった予想を出すまでの時間の合計（代理入力は回答時間いっぱいとみなす）
+      const psec = typeof pr.t === "number" && !pr.manual ? Math.max(0, (pr.t - curQStart) / 1000) : curSecs;
+      updates[`players/${pid}/audTime`] = +((p.audTime || 0) + psec).toFixed(2);
+    }
   });
   teams.forEach((t, i) => {
     const tid = "t" + i, g = gains[tid];
@@ -1479,11 +1485,16 @@ $("periodBtn").onclick = async () => {
 };
 
 // ===== 結果発表 =====
-// 観客王：予想がいちばん当たった人。同じ回数なら全員（個人賞なので複数でよい）
+// 観客王は1人だけ（2026-11-21 CEO決定）：予想がいちばん当たった人。同じ回数なら、当たった予想を出すまでの時間の合計が短い人
 function audKingList(arr) {
   const top = Math.max(0, ...arr.map(p => p.audPts || 0));
-  return top > 0 ? arr.filter(p => (p.audPts || 0) === top) : [];
+  if (top <= 0) return [];
+  const same = arr.filter(p => (p.audPts || 0) === top).sort((a, b) => (a.audTime || 0) - (b.audTime || 0));
+  audTie = same.length > 1;
+  return same.slice(0, 1);
 }
+let audTie = false;
+const AUD_RULE = "脱落中の予想投票がいちばん当たった人（同じなら、当たった予想を出すまでの時間の合計が短い人）";
 async function finishGame() {
   clearInterval(timerInt);
   showTicker("");
@@ -1540,7 +1551,7 @@ async function finishGame() {
   // call＝その発表に進むボタンの文字。最後に、各ボタンの文字を「次の発表」に合わせる
   awardSteps = [];
   awardSteps.push({ call: "🔮 観客王の発表", drum: 1400, confetti: !!audKing, html: `<div class="alabel">🔮 観客王（脱落中の予想投票がいちばん当たった人）</div>` +
-    `<div class="aname">${audKing ? audNames("さん") : "該当なし"}</div><div class="asub">${audKing ? `予想的中 <b>${audKing.audPts}回</b>` : ""}</div>` });
+    `<div class="aname">${audKing ? audNames("さん") : "該当なし"}</div><div class="asub">${audKing ? `予想的中 <b>${audKing.audPts}回</b>` + (audTie ? `（同じ回数の人がいたため、時間の合計 <b>${(+audKing.audTime || 0).toFixed(2)}秒</b> で決定）` : "") + "<br>" : ""}<small>決め方：${AUD_RULE}</small></div>` });
   awardSteps.push({ call: "⚡ 最速王の発表", drum: 1400, confetti: !!kingPlayer, html: `<div class="alabel">⚡ 最速王</div>` +
     `<div class="aname">${kingPlayer ? esc(kingPlayer.name) + "さん" : "該当なし"}</div>` +
     `<div class="asub">${speedKing ? `いちばん早い正解 <b>${speedKing[1]}回</b>` + (speedTie ? `（同じ回数の人がいたため、時間の合計 <b>${(fastestTime[speedKing[0]] || 0).toFixed(2)}秒</b> で決定）` : "") + "<br>" : ""}<small>決め方：${SPEED_RULE}</small></div>` });
