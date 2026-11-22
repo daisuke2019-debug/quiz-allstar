@@ -499,7 +499,7 @@ function watch() {
       $("qTextP").textContent = q.text;
       $("roleBadge").className = "badge" + (role === "pred" ? " predB" : "");
       const livesLeft = Math.max(0, (meta.lives || 1) - myMiss);
-      $("roleBadge").textContent = role === "pred" ? "予想で参加" : "✋ 回答者" + (meta.auto ? "　ライフ " + "❤️".repeat(livesLeft) : "");
+      $("roleBadge").textContent = meta.practice ? "🔰 練習問題（点数なし）" : role === "pred" ? "予想で参加" : "✋ 回答者" + (meta.auto ? "　ライフ " + "❤️".repeat(livesLeft) : "");
       setRoleView(role === "pred");
       $("dblBadge").classList.toggle("hidden", !meta.dbl);
       if (meta.state === "reading") {
@@ -554,6 +554,12 @@ function watch() {
       let msg, sub, win = false;
       if (currentQi !== meta.qi) {
         msg = "正解発表"; sub = `正解は ${LABELS[correct]} でした`;
+      } else if (meta.practice) {
+        // 練習問題（2026-11-22 CEO決定）：点数・ライフには入らない
+        const my = role === "pred" ? predicted : picked;
+        msg = my === correct ? "🎉 正解！" : (my === -1 ? "時間切れ…" : "残念、不正解");
+        win = my === correct;
+        sub = `正解は ${LABELS[correct]}。練習なので点数には入りません。本番もこの調子で！`;
       } else if (role === "pred") {
         if (predicted === correct) { msg = "🔮 予想的中！"; sub = "観客ポイント +1"; win = true; }
         else if (predicted === -1) { msg = "正解発表"; sub = `正解は ${LABELS[correct]}。次は予想してみよう`; }

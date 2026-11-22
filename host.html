@@ -391,6 +391,9 @@
       <div class="row" style="justify-content:center">
         <button id="askBtn">出題する！</button>
       </div>
+      <div class="row hidden" style="justify-content:center" id="practiceRow">
+        <button class="sub2" id="practiceBtn">🔰 練習問題（点数・ライフ・記録には入りません）</button>
+      </div>
       <div class="row" style="justify-content:center">
         <button class="sub2 hidden" id="periodBtn">このピリオドを終える（ピリオド優勝の発表 → 全員復活）</button>
         <button class="sub2 pingStart">📶 接続チェック</button>
@@ -1048,6 +1051,8 @@ function showPrep() {
   $("prepArea").classList.remove("hidden");
   fitStage();
   $("askBtn").disabled = qi + 1 >= questions.length;
+  // 練習問題は、本番の第1問を出す前だけ出せる（2026-11-22 CEO決定）
+  $("practiceRow").classList.toggle("hidden", qi !== -1);
   // 最終ピリオドには「次のピリオド」がないので、ピリオドを終えるボタンは出さない
   $("periodBtn").classList.toggle("hidden", !periodDirty || (isAuto() && !!planOf(period).last));
   renderQCountWarn();
@@ -1070,6 +1075,7 @@ function setPrepNext() {
   const list = Object.values(playersCache);
   if (list.length && list.every(p => p.alive === false)) setNext("periodBtn", "全員脱落中 →「このピリオドを終える」で全員復活");
   else if (qi + 1 >= questions.length) setNext("earlyFinishBtn", "問題はすべて終了 →「結果発表へ進む」");
+  else if (qi === -1 && practiceN === 0) setNext("practiceBtn", "まず練習 →「練習問題」（点数なし）。終わったら本番の「出題する！」");
   else setNext("askBtn", isAuto() ? "問題を出す →「出題する！」" : "形式を選んで「出題する！」");
 }
 // 全員が脱落しているときは、出題前に知らせる
@@ -1090,13 +1096,33 @@ function renderChoices(q) {
   $("choiceGrid").innerHTML = q.choices.map((c,j)=>`<div class="choice ${COLORS[j]}" id="ch${j}"><small>${LABELS[j]}</small>${esc(c)}<span class="cnt" id="cnt${j}"></span></div>`).join("");
 }
 
-$("askBtn").onclick = async () => {
-  if (qi + 1 >= questions.length) return;
+// ===== 練習問題（2026-11-22 CEO決定）：本番の第1問の前に1問だけ。点数・ライフ・観客ポイント・最速の記録には入れない =====
+// 練習のあいだは qi を 900番台の仮の番号にして、本番の回答と混ざらないようにする。終わったら元に戻す
+// 11/22 CEO決定の練習問題（解説は司会が読む：「水の化学式はH2Oです。」）
+const PRACTICE_Q = { text: "【練習問題・点数なし】水の化学式はどれでしょう？", choices: ["H2O", "CO2", "O2", "NaCl"], correct: 0 };
+let practice = false, practiceN = 0, practiceSavedQi = -1;
+const curQ = () => practice ? PRACTICE_Q : questions[qi];
+async function endPractice() {
+  const pq = qi;
+  practice = false; qi = practiceSavedQi;
+  $("nextBtn").textContent = "次の問題へ";
+  roomRef().child("answers/" + pq).remove().catch(() => {});
+  roomRef().child("predictions/" + pq).remove().catch(() => {});
+  await roomRef().child("meta").set({ state: "lobby", qi, period });
+  showPrep();
+}
+$("practiceBtn").onclick = () => askQuestion(true);
+$("askBtn").onclick = () => askQuestion(false);
+async function askQuestion(isPractice) {
+  if (isPractice ? qi !== -1 : qi + 1 >= questions.length) return;
   if (pingNonce) { if (pingRef && pingFn) pingRef.off("value", pingFn); pingRef = null; pingFn = null; pingNonce = ""; pingResp = {}; $("pingCard").classList.add("hidden"); }
-  qi++;
+  if (isPractice) { practiceN++; practiceSavedQi = qi; practice = true; qi = 900 + practiceN; }
+  else qi++;
   playSound("jingle");
-  curAuto = isAuto();
-  if (curAuto) {
+  curAuto = isPractice ? false : isAuto();
+  if (isPractice) {
+    curMode = "points"; curConsult = false; curDbl = false; curLives = 1;
+  } else if (curAuto) {
     const pl = planOf(period);
     curMode = "survival"; curConsult = pl.consult; curDbl = !!pl.dbl; curLives = pl.lives;
   } else {
@@ -1105,12 +1131,12 @@ $("askBtn").onclick = async () => {
   $("dblView").classList.toggle("hidden", !curDbl);
   curAnsSet = {}; curPredSet = {}; answerClosed = false; answerStarted = false; revealed = false;
   renderMonitor();
-  const q = questions[qi];
+  const q = curQ();
   $("prepArea").classList.add("hidden");
   $("revealArea").classList.add("hidden");
   $("periodResult").classList.add("hidden");
   showTicker("");
-  $("qNum").textContent = curAuto
+  $("qNum").textContent = practice ? "🔰 練習問題（点数・ライフ・記録には入りません）" : curAuto
     ? `${periodName(period)} ${qi + 1 - periodStart(period)}問目（全体の第${qi+1}問 ／ 全${questions.length}問）　ライフ${curLives}` + (curConsult ? "・相談タイムあり" : "") + (curDbl ? "　🔥チーム得点2倍" : "")
     : `第${qi+1}問 ／ 全${questions.length}問（${ {points:"通常",consult:"相談タイムつき",survival:"サバイバル",rep:"代表者対決"}[curMode] }）` + (curDbl ? "　🔥チーム得点2倍" : "");
   // 問題文を先に書いてから状態を変える（スマホが古い問題を読まないように）
@@ -1118,7 +1144,7 @@ $("askBtn").onclick = async () => {
   clearInterval(timerInt);
   {
     // 読み上げ中：問題と選択肢を見せるが、まだ答えられない
-    await roomRef().child("meta").set({ state: "reading", qi, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, consult: curConsult, pname: curAuto ? planOf(period).name : "" });
+    await roomRef().child("meta").set({ state: "reading", qi, practice, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, consult: curConsult, pname: curAuto ? planOf(period).name : "" });
     renderChoices(q);
     $("questionArea").classList.remove("hidden");
     $("readingMsg").classList.remove("hidden");
@@ -1129,7 +1155,7 @@ $("askBtn").onclick = async () => {
     $("startAnsBtn").classList.remove("hidden");
     setNext("startAnsBtn", curConsult ? "問題を読み上げたら「相談タイムスタート！」" : "問題を読み上げたら「回答スタート！」");
   }
-};
+}
 // 相談タイム：読み上げのあとに始める（①読み上げ → ②相談 → ③回答スタート）。大画面には問題と選択肢を出したまま
 async function startConsult() {
   const secs = curAuto ? AUTO_CONSULT : +$("consultSel").value;
@@ -1154,8 +1180,8 @@ $("startAnsBtn").onclick = () => { $("startAnsBtn").classList.add("hidden"); if 
 $("consultDoneBtn").onclick = () => { $("consultDoneBtn").classList.add("hidden"); $("consultArea").classList.add("hidden"); stopSound("consult"); beginAnswer(); };
 
 async function beginAnswer() {
-  const q = questions[qi];
-  curSecs = curAuto ? AUTO_SECS : +$("secSel").value;
+  const q = curQ();
+  curSecs = (curAuto || practice) ? AUTO_SECS : +$("secSel").value;
   curQStart = now();
   curEndsAt = curQStart + curSecs * 1000;
   // 画面のカウントダウンはPC内部の時計で数える（時刻合わせのずれの影響を受けない）
@@ -1167,7 +1193,7 @@ async function beginAnswer() {
   $("ringWrap").classList.remove("hidden");
   $("revealBtn").classList.add("hidden");
   playSound("think", true);
-  await roomRef().child("meta").set({ state: "question", qi, startAt: curQStart, endsAt: curEndsAt, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, pname: curAuto ? planOf(period).name : "" });
+  await roomRef().child("meta").set({ state: "question", qi, practice, startAt: curQStart, endsAt: curEndsAt, mode: curMode, period, dbl: curDbl, lives: curLives, auto: curAuto, pname: curAuto ? planOf(period).name : "" });
   answerStarted = true;
   setNext(null, "回答時間中…（締切後に「正解発表！」が光ります）");
   renderMonitor();
@@ -1226,7 +1252,7 @@ $("revealBtn").onclick = async () => {
   renderMonitor();
   stopSound("think"); stopSound("consult");
   liveOff.forEach(f => f()); liveOff = [];
-  const q = questions[qi];
+  const q = curQ();
   // 出題中ずっと受け取っていた回答・予想をそのまま使う（サーバーへの問い合わせ待ちをなくす）
   const rawAns = { ...curAnsSet }, preds = { ...curPredSet };
   const inTime = a => a && (typeof a.t !== "number" || a.t <= curEndsAt + GRACE_MS);
@@ -1302,7 +1328,10 @@ $("revealBtn").onclick = async () => {
       g.pts = g.correct > 0 ? 5 : 0;
       if (curDbl) g.pts *= 2;
     } else {
-      g.pts = g.correct;
+      // 4人換算（2026-11-22 CEO決定）：欠席などでチームの人数が4人でないときは「正解数×4÷人数（四捨五入）」。4人チームはそのまま
+      const memberN = teamMembers(tid);
+      g.pts = memberN > 0 && memberN !== 4 ? Math.round(g.correct * 4 / memberN) : g.correct;
+      g.scaled = memberN > 0 && memberN !== 4 && g.correct > 0;
       // 全員正解ボーナスは、生き残りが2人以上いて、その全員が正解したときだけ（2026-11-21 BOARD決定）
       const aliveMembers = Object.entries(playersCache).filter(([, p]) => p.team === tid && p.alive !== false);
       if (aliveMembers.length >= 2 && aliveMembers.every(([pid]) => answers[pid] && answers[pid].choice === q.correct)) {
@@ -1316,17 +1345,19 @@ $("revealBtn").onclick = async () => {
     if (g.tCnt) { updates[`teamState/${tid}/tSum`] = +((st.tSum || 0) + g.tSum).toFixed(2); updates[`teamState/${tid}/tCnt`] = (st.tCnt || 0) + g.tCnt; }
   });
   speed.sort((a, b) => a.sec - b.sec);
-  if (speed[0]) {
+  // 練習問題は、点数・ライフ・観客ポイント・最速の記録を何も保存しない
+  if (practice) Object.keys(updates).forEach(k => delete updates[k]);
+  if (speed[0] && !practice) {
     fastestCount[speed[0].pid] = (fastestCount[speed[0].pid] || 0) + 1;
     fastestTime[speed[0].pid] = (fastestTime[speed[0].pid] || 0) + speed[0].sec; // 最速王が同じ回数で並んだときに使う
   }
-  periodDirty = true;
+  if (!practice) periodDirty = true;
   // 最終ピリオドで全員脱落したら、次の問題の前に全員復活して最終を続ける（最後まで逆転のチャンスを残す）
   // 全員脱落したら、ピリオドを終えずに次の問題から全員復活して続ける（ピリオドの最後の問題なら「ピリオド結果へ」で復活）
   finalRevive = curAuto && eligibleList.length > 0 && eligibleList.length === newlyOut.length && qi + 1 < questions.length && (!!planOf(period).last || qi < periodEnd(period));
   // 保存はうしろで行い、大画面の発表は待たせない（回線が遅くても止まらない）
   roomRef().update(updates)
-    .then(() => roomRef().child("meta").update({ state: "reveal", correct: q.correct, counts, gains, mode: curMode, lives: curLives, auto: curAuto, reviveAll: finalRevive }))
+    .then(() => roomRef().child("meta").update({ state: "reveal", practice, correct: q.correct, counts, gains, mode: curMode, lives: curLives, auto: curAuto, reviveAll: finalRevive }))
     .catch(() => { $("offView").textContent = "⚠️ 結果の保存に失敗しました。ネット接続を確認してください"; })
     .finally(() => { revealBusy = false; });
   setTimeout(() => { revealBusy = false; }, 8000); // 回線が切れて保存が終わらなくても、中断はできるようにする
@@ -1364,17 +1395,18 @@ $("revealBtn").onclick = async () => {
         `<tr><td>${i + 1}位</td><td>${esc(s.name)}</td><td>${esc(teamName(s.team))}</td><td>${s.sec.toFixed(2)}秒</td></tr>`).join("")}</tbody></table>`
     : "正解者なし";
   // 大画面には、メンバーがいるチームだけを出す
-  $("gainList").innerHTML = (curMode === "survival" && !curAuto) ? "" : teams.map((t, i) => {
+  $("gainList").innerHTML = practice ? "🔰 練習問題なので、点数・ライフ・記録には入りません。本番もこの調子で！" : (curMode === "survival" && !curAuto) ? "" : teams.map((t, i) => {
     if (teamMembers("t" + i) === 0) return "";
     const g = gains["t" + i];
-    return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.bonus ? "・全員正解ボーナス！" : ""}${curDbl && g.pts > 0 ? "・🔥2倍" : ""}）`;
+    return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.scaled ? `・${teamMembers("t" + i)}人チームを4人換算` : ""}${g.bonus ? "・全員正解ボーナス！" : ""}${curDbl && g.pts > 0 ? "・🔥2倍" : ""}）`;
   }).filter(Boolean).join("<br>");
   if (finalRevive) showTicker("全員脱落！ 次の問題から全員復活して続けます！"); else showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
   playSound("correct");
   if (newlyOut.length && !finalRevive) setTimeout(() => playSound("out"), 1200);
   beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
   const allOutNow = eligibleList.length > 0 && eligibleList.length === newlyOut.length;
-  if (qi + 1 >= questions.length) { $("finishBtn").classList.remove("hidden"); setNext("finishBtn", "結果発表へ"); }
+  if (practice) { $("nextBtn").textContent = "練習おわり（本番へ）"; $("nextBtn").classList.remove("hidden"); setNext("nextBtn", "練習おわり →「練習おわり（本番へ）」"); }
+  else if (qi + 1 >= questions.length) { $("finishBtn").classList.remove("hidden"); setNext("finishBtn", "結果発表へ"); }
   else if (curAuto && !planOf(period).last && qi >= periodEnd(period)) {
     // ピリオドの最後の問題（または全員脱落）→ ピリオド結果と全員復活へ
     $("periodEndBtn").classList.remove("hidden");
@@ -1383,6 +1415,7 @@ $("revealBtn").onclick = async () => {
   else { $("nextBtn").classList.remove("hidden"); setNext("nextBtn", "次の問題へ"); }
 };
 $("nextBtn").onclick = async () => {
+  if (practice) return endPractice();
   if (finalRevive) {
     finalRevive = false;
     const up = {};
@@ -1419,7 +1452,7 @@ $("abortBtn").onclick = () => {
 };
 async function abortQuiz() {
   // 出題の途中（まだ正解発表していない）なら、続けるときにこの問題を最初から出し直す
-  const midQ = qi >= 0 && !revealed && $("prepArea").classList.contains("hidden");
+  const midQ = (qi >= 0 || practice) && !revealed && $("prepArea").classList.contains("hidden");
   let prevMeta = null;
   try { prevMeta = (await Promise.race([roomRef().child("meta").once("value"), sleep(3000).then(() => null)]))?.val() || null; } catch (e) {}
   abortSaved = { midQ, meta: prevMeta || { state: "lobby", qi, period } };
@@ -1439,7 +1472,8 @@ $("resumeBtn").onclick = async () => {
     // 途中だった問題の回答を消して、出題前の画面に戻す（ライフや点数は、正解発表前なので変わっていない）
     await roomRef().child("answers/" + qi).remove();
     await roomRef().child("predictions/" + qi).remove();
-    qi--;
+    if (practice) { practice = false; qi = practiceSavedQi; $("nextBtn").textContent = "次の問題へ"; } // 練習の途中なら、練習をやめて第1問の前に戻す
+    else qi--;
     curAnsSet = {}; curPredSet = {}; answerStarted = false; answerClosed = false;
     await roomRef().child("meta").set({ state: "lobby", qi, period });
     showPrep();
