@@ -641,10 +641,10 @@ let period = 1, periodWinners = [], periodDirty = false, liveOff = [], curDbl = 
 // ===== ピリオド進行（説明資料どおり）=====
 // 毎問：正解した人数分＋生き残り全員正解でボーナスがチーム点。まちがい・未回答でライフ-1、ライフ0で脱落。
 const PLAN = [
-  { name: "スターサバイバル",       n: 6, lives: 2, consult: false, dbl: false },
-  { name: "プラネットサバイバル",   n: 8, lives: 1, consult: true,  dbl: false },
-  { name: "ギャラクシーサバイバル", n: 8, lives: 1, consult: false, dbl: false },
-  { name: "ユニバースサバイバル",   n: 6, lives: 1, consult: true,  dbl: true, last: true },
+  { name: "スターサバイバル（EASY）", n: 6, lives: 2, consult: false, dbl: false },
+  { name: "プラネットサバイバル（NORMAL）", n: 8, lives: 1, consult: true,  dbl: false },
+  { name: "ギャラクシーサバイバル（HARD）", n: 8, lives: 1, consult: false, dbl: false },
+  { name: "ユニバースサバイバル（SUPER HARD）", n: 6, lives: 1, consult: true,  dbl: true, last: true },
 ];
 let AUTO_SECS = 10, AUTO_CONSULT = 45; // 資料どおり：回答10秒・相談45秒
 let curConsult = false, curLives = 1, curAuto = false, finalRevive = false;
