@@ -1585,7 +1585,8 @@ async function finishGame() {
     `🔮 観客王（予想的中 ${audKing ? audKing.audPts : 0}回）：<b>${audKing ? audNames("") : "—"}</b><br>` +
     `⚡ 最速王（いちばん早い正解 ${speedKing ? speedKing[1] : 0}回）：<b>${kingPlayer ? esc(kingPlayer.name) : "—"}</b><br>` +
     `🎖 サバイバル王（最終ピリオド 正解${champ ? champ.pScore : 0}問）：<b>${champ ? esc(champ.name) : "—"}</b>` +
-    (periodWinners.length ? "<br><br>" + periodWinners.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("<br>") : "");
+    // 11/22 CEO A：最終ピリオドの優勝者はサバイバル王として発表するので、一覧には出さない（資料どおりの進行のとき）
+    (() => { const pw = periodWinners.filter(w => !(isAuto() && w.period >= PLAN.length)); return pw.length ? "<br><br>" + pw.map(w => `ピリオド${w.period} 優勝：<b>${esc(w.name)}</b>`).join("<br>") : ""; })();
   $("finalTeamBody").innerHTML = ranked.map((t, i) =>
     `<tr class="${i === 0 ? "firstRow" : ""}"><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.points}<br><small>${tieNote(ranked, i)}</small></td><td>${t.bonus}回</td><td>${t.surv}／${t.members}人</td></tr>`).join("");
   $("rankBody").innerHTML = arr.map((p, i) =>
