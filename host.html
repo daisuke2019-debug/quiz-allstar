@@ -1686,8 +1686,16 @@ function launchConfetti() {
 $("resetBtn").onclick = async () => {
   clearInterval(hostHbInt); // 消したあとに合図で部屋が作り直されないように
   if (pin) await roomRef().remove();
+  leavingOnPurpose = true;
   location.reload();
 };
+// 11/22 BOARD・CEO A：部屋を作ったあとは、うっかり閉じる・更新する前に確認を出す（この画面は部屋に入り直せないため）
+let leavingOnPurpose = false;
+window.addEventListener("beforeunload", e => {
+  if (!pin || leavingOnPurpose) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 </script>
 </body>
 </html>

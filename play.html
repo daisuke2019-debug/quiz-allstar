@@ -404,7 +404,8 @@ function watch() {
     // 自分の通信が切れているときは、自分側の表示（右上の赤）に任せる。古い司会画面（合図なし）の部屋では何もしない
     if (!connected || !hostHb) { w.classList.add("hidden"); return; }
     const gone = now() - hostHb;
-    if (gone < 60000) { w.classList.add("hidden"); return; }
+    // 11/22 BOARD・CEO A：60秒→3分。司会画面のタブが5分以上隠れるとChromeが合図を1分おきに遅らせるため
+    if (gone < 180000) { w.classList.add("hidden"); return; }
     w.innerHTML = gone < 600000
       ? "⏳ 司会の画面と通信できていません。<br>このまま待っててね（自動で戻ります）"
       : "⏸ 司会の画面が10分以上止まっています。<br>クイズが終わったか、中断しているかもしれません。スタッフの案内に従ってね";
