@@ -327,6 +327,12 @@
     <p class="note">音源はこのPCの中だけに保存されます（ネットには上がりません）。著作権フリーの音源かオリジナルの音を使ってください。出題・相談・回答時間・ドラムロール・正解発表・脱落・優勝に合わせて自動で鳴ります（相談と回答時間はくり返し、ドラムロールは未設定なら「ピッ」の音）。入場BGMは右下のボタンで再生／停止します。</p>
     <h2 style="margin-top:16px">③ 部屋を作る</h2>
     <div class="row"><button id="createRoom">部屋を作って参加者を待つ</button></div>
+    <h2 style="margin-top:16px">🔁 司会画面を開き直す（続きから）</h2>
+    <div class="row">
+      <input id="resumePin" inputmode="numeric" maxlength="4" placeholder="部屋の番号（4けた）" style="width:11em">
+      <button class="sub2" id="resumeRoom">この部屋の続きから</button>
+    </div>
+    <p class="note">司会画面を閉じてしまった・固まったときだけ使います。先に同じ問題を用意してから押してください（同じパソコンならそのまま）。出題の途中だった問題は、出題前に戻して出し直します。</p>
   </div>
 
   <!-- 接続チェック -->
@@ -780,26 +786,152 @@ $("createRoom").onclick = async () => {
   const teamsObj = {}, stateObj = {};
   teams.forEach((t, i) => { teamsObj["t" + i] = { name: t }; stateObj["t" + i] = { points: 0, bonus: 0 }; });
   await roomRef().set({ meta: { state: "lobby", qi: -1, period: 1 }, teams: teamsObj, teamState: stateObj, notice: $("noticeSel").value, createdAt: Date.now() });
-  hostBeat(); clearInterval(hostHbInt); hostHbInt = setInterval(hostBeat, 10000);
-  $("pinView").textContent = pin;
+  localStorage.setItem("qs_lastPin", pin);
+  saveHost();
   $("setupCard").classList.add("hidden");
   $("lobbyCard").classList.remove("hidden");
   setNext(document.querySelector("#lobbyCard .pingStart"), "全員そろったら「📶 接続チェック」");
+  attachRoom();
+};
+
+// 部屋の見張り（部屋を作ったときと、開き直したときに使う）
+function attachRoom() {
+  hostBeat(); clearInterval(hostHbInt); hostHbInt = setInterval(hostBeat, 10000);
+  $("pinView").textContent = pin;
   roomRef().child("players").on("value", snap => {
     playersCache = snap.val() || {};
     renderLobby(); renderStandings(); renderSurv(); renderMonitor();
     if (pingNonce) renderPing();
   });
   roomRef().child("teamState").on("value", snap => { teamState = snap.val() || {}; renderStandings(); });
+  const stampSince = now() - 3000; // 開き直したとき、前に押されたスタンプをまとめて出さない
   roomRef().child("stamps").on("child_added", snap => {
     const s = snap.val(); if (!s) return;
+    if (typeof s.t === "number" && s.t < stampSince) return;
     const el = document.createElement("div");
     el.className = "stamp"; el.textContent = s.e || "👏";
     el.style.left = (8 + Math.random() * 84) + "%"; el.style.bottom = "8%";
     $("stampLayer").appendChild(el);
     setTimeout(() => el.remove(), 2500);
   });
-};
+}
+
+// ===== 司会画面を開き直す（2026-11-22 BOARD・CEO A）=====
+// 司会画面の中だけにあった記録（最速王・ピリオド優勝者など）も Firebase に保存しておき、開き直したときに戻す
+function saveHost() {
+  if (!pin || !db) return;
+  roomRef().child("hostState").set({
+    started: !$("stageCard").classList.contains("hidden") || qi >= 0 || practiceN > 0 || !!awardSteps.length,
+    auto: isAuto(), practiceN, periodDirty, periodWinners,
+    fastestCount, fastestTime,
+    sec: $("secSel").value, consult: $("consultSel").value, bonus: $("bonusSel").value,
+    qn: questions.length, q0: (questions[0] && questions[0].text) || "",
+    saved: firebase.database.ServerValue.TIMESTAMP
+  }).catch(() => {});
+}
+const resumePinBox = $("resumePin");
+if (resumePinBox) resumePinBox.value = localStorage.getItem("qs_lastPin") || "";
+$("resumeRoom").onclick = () => twoStep($("resumeRoom"), "⚠️ もう一度押すと、この部屋の続きから始めます（5秒以内）", resumeRoom);
+async function resumeRoom() {
+  if (!db) { alert("先にFirebase設定を貼ってください"); return; }
+  const p = String($("resumePin").value || "").trim();
+  if (!/^\d{4}$/.test(p)) { alert("部屋の番号（4けた）を入れてください"); return; }
+  collectAll();
+  const snap = await db.ref("rooms/" + p).once("value");
+  const room = snap.val();
+  if (!room || !room.meta) { alert("この番号の部屋が見つかりません。番号を確かめてください"); return; }
+  const hs = room.hostState || {};
+  if (hs.qn && (hs.qn !== questions.length || (hs.q0 && questions[0] && hs.q0 !== questions[0].text))) {
+    alert(`問題が前と違います（前：${hs.qn}問／いま：${questions.length}問）。同じ問題ファイルを「ファイルから読み込む」で読み込んでから、もう一度押してください`);
+    return;
+  }
+  pin = p;
+  localStorage.setItem("qs_lastPin", pin);
+  // チームは部屋に保存されている名前を使う（t0, t1, … の順）
+  const tObj = room.teams || {};
+  teams = Object.keys(tObj).sort((a, b) => +a.slice(1) - +b.slice(1)).map(k => tObj[k].name);
+  playersCache = room.players || {};
+  teamState = room.teamState || {};
+  // 司会画面の中だけにあった記録を戻す
+  $("autoChk").checked = hs.auto !== false; $("autoChk").disabled = !!hs.started;
+  if (hs.sec) $("secSel").value = hs.sec;
+  if (hs.consult) $("consultSel").value = hs.consult;
+  if (hs.bonus) $("bonusSel").value = hs.bonus;
+  practiceN = hs.practiceN || 0;
+  periodDirty = !!hs.periodDirty;
+  periodWinners = Array.isArray(hs.periodWinners) ? hs.periodWinners : Object.values(hs.periodWinners || {});
+  fastestCount = hs.fastestCount || {}; fastestTime = hs.fastestTime || {};
+  practice = false; practiceSavedQi = -1; finalRevive = false; pingNonce = ""; pingResp = {};
+  abortSaved = null; revealed = false; answerStarted = false; answerClosed = false; curAnsSet = {}; curPredSet = {};
+  $("nextBtn").textContent = "次の問題へ"; curDbl = false; $("dblView").classList.add("hidden");
+  // 中断中だったときは、中断する前の状態から考える
+  let meta = room.meta;
+  if (meta.state === "aborted" && room.hostAbort) meta = room.hostAbort.midQ ? { ...room.hostAbort.meta, state: "__midq" } : (room.hostAbort.meta || { state: "lobby", qi: meta.qi, period: meta.period });
+  period = meta.period || 1;
+  qi = typeof meta.qi === "number" ? meta.qi : -1;
+  $("setupCard").classList.add("hidden");
+  attachRoom();
+  if (!hs.started) {
+    // まだクイズを始めていない → 待機画面へ
+    qi = -1;
+    await roomRef().child("meta").set({ state: "lobby", qi: -1, period: 1 });
+    $("lobbyCard").classList.remove("hidden");
+    renderLobby();
+    setNext(document.querySelector("#lobbyCard .pingStart"), "全員そろったら「📶 接続チェック」");
+    saveHost();
+    return;
+  }
+  $("stageCard").classList.remove("hidden");
+  const st = meta.state;
+  let pendingPeriodEnd = false;
+  if (st === "reading" || st === "consult" || st === "question" || st === "__midq") {
+    // 問題の途中 → その問題の回答を消して、出題前に戻す（正解発表の前なので点数とライフは変わっていない）
+    await roomRef().child("answers/" + qi).remove();
+    await roomRef().child("predictions/" + qi).remove();
+    if (meta.practice || qi >= 900) qi = -1; else qi--;
+  } else if (st === "reveal") {
+    if (meta.practice || qi >= 900) {
+      // 練習の正解発表のあと → 練習の回答を消して、第1問の前へ
+      roomRef().child("answers/" + qi).remove().catch(() => {});
+      roomRef().child("predictions/" + qi).remove().catch(() => {});
+      qi = -1;
+    } else {
+      if (meta.reviveAll) {
+        // 全員脱落のあと → 次の問題から全員復活
+        const up = {};
+        Object.keys(playersCache).forEach(pid => { up[`players/${pid}/alive`] = true; up[`players/${pid}/outAt`] = null; up[`players/${pid}/miss`] = 0; });
+        await roomRef().update(up);
+      }
+      if (isAuto() && !planOf(period).last && qi >= periodEnd(period) && qi + 1 < questions.length) pendingPeriodEnd = true;
+    }
+  } else if (st === "period") {
+    // ピリオド結果を出したあと → 次のピリオドへ（ピリオドの記録はすでに保存済み）
+    period = (meta.period || 1) + 1;
+    if (isAuto() && qi + 1 < periodStart(period)) qi = periodStart(period) - 1;
+    periodDirty = false;
+  } else if (st === "awards") {
+    // 結果発表の途中 → 結果発表を最初から
+    await roomRef().child("meta").set({ state: "lobby", qi, period });
+    $("periodResult").classList.add("hidden");
+    renderSurv();
+    await finishGame();
+    saveHost();
+    return;
+  } else if (qi >= 900) qi = -1; // 練習の途中の中断など
+  await roomRef().child("meta").set({ state: "lobby", qi, period });
+  $("periodResult").classList.add("hidden");
+  showTicker("");
+  renderSurv();
+  showPrep();
+  if (pendingPeriodEnd) {
+    // ピリオドの最後の問題の正解発表が終わっている → 先にピリオドを終える
+    $("askBtn").disabled = true;
+    $("periodBtn").classList.remove("hidden");
+    setNext("periodBtn", "続きから：ピリオドの最後 →「このピリオドを終える」");
+  }
+  renderMonitor();
+  saveHost();
+}
 
 function renderLobby() {
   renderQCountWarn();
@@ -1038,6 +1170,7 @@ $("startGame").onclick = () => {
   renderSurv();
   showPrep();
   renderMonitor();
+  saveHost();
 };
 
 function showPrep() {
@@ -1110,6 +1243,7 @@ async function endPractice() {
   roomRef().child("predictions/" + pq).remove().catch(() => {});
   await roomRef().child("meta").set({ state: "lobby", qi, period });
   showPrep();
+  saveHost();
 }
 $("practiceBtn").onclick = () => askQuestion(true);
 $("askBtn").onclick = () => askQuestion(false);
@@ -1352,6 +1486,7 @@ $("revealBtn").onclick = async () => {
     fastestTime[speed[0].pid] = (fastestTime[speed[0].pid] || 0) + speed[0].sec; // 最速王が同じ回数で並んだときに使う
   }
   if (!practice) periodDirty = true;
+  saveHost(); // 最速王の回数などを Firebase にも残す（司会画面を開き直したとき用）
   // 最終ピリオドで全員脱落したら、次の問題の前に全員復活して最終を続ける（最後まで逆転のチャンスを残す）
   // 全員脱落したら、ピリオドを終えずに次の問題から全員復活して続ける（ピリオドの最後の問題なら「ピリオド結果へ」で復活）
   finalRevive = curAuto && eligibleList.length > 0 && eligibleList.length === newlyOut.length && qi + 1 < questions.length && (!!planOf(period).last || qi < periodEnd(period));
@@ -1462,10 +1597,12 @@ async function abortQuiz() {
   $("abortCard").classList.remove("hidden");
   setNext("resumeBtn", "続けるときは「中断をやめて続ける」");
   await roomRef().child("meta").set({ state: "aborted", qi, period });
+  roomRef().child("hostAbort").set(abortSaved).catch(() => {}); // 中断中に司会画面を開き直したとき用
 }
 $("resumeBtn").onclick = async () => {
   const s = abortSaved || { midQ: false, meta: { state: "lobby", qi, period } };
   abortSaved = null;
+  roomRef().child("hostAbort").remove().catch(() => {});
   $("abortCard").classList.add("hidden");
   $("stageCard").classList.remove("hidden");
   if (s.midQ) {
@@ -1527,6 +1664,7 @@ $("periodBtn").onclick = async () => {
   showPrep();
   launchConfetti();
   playSound("fanfare");
+  saveHost();
 };
 
 // ===== 結果発表 =====
@@ -1548,6 +1686,7 @@ async function finishGame() {
     periodWinners.push({ period, name: w ? w.name : "—", score: w ? w.pScore : 0, time: w ? w.pTime : 0 });
     periodDirty = false;
   }
+  saveHost();
   const ranked = sortedTeams();
   const arr = Object.entries(playersCache).map(([id, p]) => ({ id, ...p }));
   arr.sort((a, b) => {
