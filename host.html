@@ -759,12 +759,17 @@ function playSound(key, loop) {
   if (!a) return;
   try { stopSound(key); a.loop = !!loop; a.currentTime = 0; a.play().catch(() => {}); } catch(e) {}
 }
-// ドラムロール：音源があればそれをくり返し、なければ今までの「ピッ」の音。止める関数を返す
-function startDrum(freq, dur, every) {
-  if (soundAudio.drum) { playSound("drum", true); return () => stopSound("drum"); }
+// ドラムロール（11/23 BOARD・CEO A）：音源があれば1回だけ流し、音源の中の「ジャン！」が鳴る瞬間まで待つ（途中で切らない）。
+// 音源がなければ今までの「ピッ」の音を noFileMs だけ鳴らす。音源を使ったら true を返す
+const DRUM_HIT_SEC = 3.2; // ドラムの枠の音（結果発表.mp3）で「ジャン！」が鳴る秒。ちがう音にしたらここを変える
+async function drumRoll(freq, dur, every, noFileMs) {
+  if (soundAudio.drum) { playSound("drum", false); await sleep(DRUM_HIT_SEC * 1000); return true; }
   const t = setInterval(() => beep(freq, dur), every);
-  return () => clearInterval(t);
+  await sleep(noFileMs);
+  clearInterval(t);
+  return false;
 }
+function chime() { beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220); }
 function stopAllSounds() { SOUNDS.forEach(s => stopSound(s.key)); }
 function renderSoundPanel() {
   const box = $("soundPanel");
@@ -1455,9 +1460,7 @@ $("revealBtn").onclick = async () => {
   // ② 「ため」の演出
   const panels = [0,1,2,3].map(j => $("ch" + j)).filter(Boolean);
   panels.forEach(p => p.classList.add("suspense"));
-  const endDrum = startDrum(150, 0.05, 110);
-  await sleep(1800);
-  endDrum();
+  await drumRoll(150, 0.05, 110, 2500); // 「ジャン！」と同時に正解を出す
   panels.forEach(p => p.classList.remove("suspense"));
 
   // ③ 採点
@@ -1581,9 +1584,9 @@ $("revealBtn").onclick = async () => {
     return `${esc(t)}：<b>+${g.pts}点</b>（正解${g.correct}人${g.scaled ? `・${teamMembers("t" + i)}人チームを4人換算` : ""}${g.bonus ? "・全員正解ボーナス！" : ""}${curDbl && g.pts > 0 ? "・🔥2倍" : ""}）`;
   }).filter(Boolean).join("<br>");
   if (finalRevive) showTicker("全員脱落！ 次の問題から全員復活して続けます！"); else showTicker(newlyOut.length ? "脱落：" + newlyOut.map(n => n + "さん").join("　") + "　おつかれさま！ここからは予想投票で参加！" : "");
-  playSound("correct");
-  if (newlyOut.length && !finalRevive) setTimeout(() => playSound("out"), 1200);
-  beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
+  // 正解の音は「ジャン！」の0.35秒あと。音源を入れてあるときは「ピロリン」を重ねない（2重にしない）
+  if (soundAudio.correct) setTimeout(() => playSound("correct"), 350); else chime();
+  if (newlyOut.length && !finalRevive) setTimeout(() => playSound("out"), 1550);
   const allOutNow = eligibleList.length > 0 && eligibleList.length === newlyOut.length;
   if (practice) { $("nextBtn").textContent = "練習おわり（本番へ）"; $("nextBtn").classList.remove("hidden"); setNext("nextBtn", "練習おわり →「練習おわり（本番へ）」"); }
   else if (qi + 1 >= questions.length) { $("finishBtn").classList.remove("hidden"); setNext("finishBtn", "結果発表へ"); }
@@ -1836,11 +1839,9 @@ $("awardNextBtn").onclick = async () => {
   $("awardNextBtn").classList.add("hidden");
   setNext(null, "発表中…");
   $("awardStage").innerHTML = `<div class="drum">🥁 ・・・</div>`;
-  const endDrum = startDrum(140, 0.04, 90);
-  await sleep(st.drum);
-  endDrum();
+  const drumFile = await drumRoll(140, 0.04, 90, st.drum);
   $("awardStage").innerHTML = st.html;
-  beep(1046, 0.14); setTimeout(() => beep(1318, 0.14), 110); setTimeout(() => beep(1568, 0.26), 220);
+  if (!drumFile) chime(); // 音源のときは中の「ジャン！」で発表する
   if (st.confetti) launchConfetti();
   if (st.final) {
     launchConfetti();
