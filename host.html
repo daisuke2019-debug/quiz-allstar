@@ -541,7 +541,7 @@ function fitStage() {
 }
 addEventListener("resize", fitStage);
 
-const DEFAULT_TEAMS = ["チームA","チームB","チームC","チームD","チームE","チームF","チームG"];
+const DEFAULT_TEAMS = ["チームA","チームB","チームC","チームD","チームE","チームF","チームG","チームH"]; // 本番は8チーム（2026-11-23 CEO）
 const DEFAULT_QS = [
   { text: "日本の首都はどこ？", choices: ["大阪", "東京", "京都", "福岡"], correct: 1 },
   { text: "水の化学式はどれ？", choices: ["CO2", "O2", "H2O", "NaCl"], correct: 2 },
@@ -591,7 +591,7 @@ function collectAll() {
   qList.querySelectorAll("[data-correct]").forEach(s => questions[+s.dataset.correct].correct = +s.value);
 }
 renderTeams(); renderEditor();
-$("addTeam").onclick = () => { collectAll(); teams.push("チーム" + (teams.length + 1)); renderTeams(); };
+$("addTeam").onclick = () => { collectAll(); teams.push("チーム" + (teams.length < 26 ? String.fromCharCode(65 + teams.length) : teams.length + 1)); renderTeams(); };
 $("addQ").onclick = () => { collectAll(); questions.push({text:"",choices:["","","",""],correct:0}); renderEditor(); };
 $("saveAll").onclick = () => { collectAll(); localStorage.setItem("qs_teams", JSON.stringify(teams)); localStorage.setItem("qs_qs", JSON.stringify(questions)); alert("保存しました"); };
 
