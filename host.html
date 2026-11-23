@@ -286,7 +286,7 @@
     <button class="c0" data-proxy="0">A</button><button class="c1" data-proxy="1">B</button>
     <button class="c2" data-proxy="2">C</button><button class="c3" data-proxy="3">D</button>
   </div>
-  <div class="row" style="justify-content:center;margin-top:12px"><button class="sub2" id="proxyCancel">やめる</button></div>
+  <div class="row" style="justify-content:center;margin-top:12px;gap:10px"><button class="sub2" id="proxyRemove">この人を外す（二重登録など）</button><button class="sub2" id="proxyCancel">やめる</button></div>
 </div>
 <div id="soundDock"><button class="sub2" id="entranceBtn">▶ 入場BGM</button><button class="sub2" id="soundStopBtn">🔇 音を止める</button></div>
 <div class="wrap">
@@ -617,13 +617,29 @@ $("importFile").onchange = e => {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!Array.isArray(data.teams) || !Array.isArray(data.questions)) throw new Error("形式が違います");
-      teams = data.teams.map(String);
-      questions = data.questions.map(q => ({
-        text: String(q.text || ""),
-        choices: (q.choices || ["", "", "", ""]).map(String).slice(0, 4),
-        correct: Math.min(3, Math.max(0, +q.correct || 0))
-      }));
+      if (!Array.isArray(data.questions)) throw new Error("形式が違います");
+      // 11/23 見直し④：まちがいがあれば読み込まずに止める（正解は 0〜3 の数字 または A〜D）
+      const errs = [], newQs = [];
+      data.questions.forEach((q, k) => {
+        const no = `第${k + 1}問`;
+        const text = String((q && q.text) || "").trim();
+        const ch = Array.isArray(q && q.choices) ? q.choices.map(c => String(c ?? "").trim()) : [];
+        let c = q ? q.correct : undefined;
+        if (typeof c === "string" && /^[A-Da-d]$/.test(c.trim())) c = "ABCD".indexOf(c.trim().toUpperCase());
+        if (!text) errs.push(`${no}：問題文がありません`);
+        if (ch.length !== 4 || ch.some(x => !x)) errs.push(`${no}：選択肢が4つそろっていません`);
+        if (!Number.isInteger(c) || c < 0 || c > 3) errs.push(`${no}：正解の番号が正しくありません（${JSON.stringify(q ? q.correct : null)}）`);
+        newQs.push({ text, choices: ch.slice(0, 4), correct: c });
+      });
+      if (!newQs.length) errs.push("問題が1問もありません");
+      if (data.teams !== undefined && (!Array.isArray(data.teams) || !data.teams.map(t => String(t).trim()).filter(Boolean).length)) errs.push("チームの欄が正しくありません");
+      if (errs.length) {
+        alert("読み込みを止めました（今のデータはそのままです）\n\n" + errs.slice(0, 15).join("\n") + (errs.length > 15 ? `\n…ほか${errs.length - 15}件` : ""));
+        e.target.value = "";
+        return;
+      }
+      if (Array.isArray(data.teams)) teams = data.teams.map(t => String(t).trim()).filter(Boolean); // チームの欄が無いときは今のチームのまま
+      questions = newQs;
       if (data.settings) {
         $("secSel").value = data.settings.sec || "10";
         $("consultSel").value = data.settings.consult || "45";
@@ -632,7 +648,15 @@ $("importFile").onchange = e => {
       localStorage.setItem("qs_teams", JSON.stringify(teams));
       localStorage.setItem("qs_qs", JSON.stringify(questions));
       renderTeams(); renderEditor();
-      alert(`読み込みました（チーム${teams.length}・問題${questions.length}問）`);
+      // 正解の一覧を出して、元の問題と目で照らし合わせる（ピリオドごと：6・8・8・6問）
+      const L = "ABCD", sizes = PLAN.map(x => x.n), total = sizes.reduce((a, b) => a + b, 0);
+      let k0 = 0;
+      const lines = sizes.map((n, i) => { const part = questions.slice(k0, k0 + n).map((q, j) => `${k0 + j + 1}:${L[q.correct]}`).join(" "); k0 += n; return `ピリオド${i + 1}（${n}問）　${part || "なし"}`; });
+      if (questions.length > total) lines.push(`（${total}問より多い分：${questions.slice(total).map((q, j) => `${total + j + 1}:${L[q.correct]}`).join(" ")}）`);
+      alert(`読み込みました（チーム${teams.length}・問題${questions.length}問）` +
+        (questions.length !== total ? `\n⚠️ 問題は${total}問のはずです（今は${questions.length}問）` : "") +
+        (teams.length !== 8 ? `\n⚠️ チームは8つのはずです（今は${teams.length}つ）` : "") +
+        `\n\n▼ 正解の一覧（元の問題と照らし合わせてください）\n` + lines.join("\n"));
     } catch (err) {
       alert("読み込めませんでした。書き出したファイルを選んでください");
     }
@@ -977,7 +1001,7 @@ function connStatus(p) {
 const connIcon = p => ({ ok: "🟢", warn: "🟡", off: "🔴" }[connStatus(p)]);
 let pingNonce = "", pingResp = {}, pingRef = null, pingFn = null;
 const pingMark = pid => pingNonce ? (pingResp[pid] ? "✅" : "…") : "";
-let curAnsSet = {}, curPredSet = {}, answerClosed = false;
+let curAnsSet = {}, curPredSet = {}, answerClosed = false, ansGen = 0;
 
 function renderMonitor() {
   const box = $("monitor");
@@ -1012,7 +1036,8 @@ function renderMonitor() {
   const canProxy = proxyAllowed();
   box.classList.toggle("proxyOn", canProxy);
   $("proxyHint").textContent = canProxy ? "（スマホが使えない人は、名前をタップすると代わりに回答を入れられます）" : "";
-  if (canProxy) box.querySelectorAll("[data-mpid]").forEach(c => c.onclick = () => openProxy(c.dataset.mpid));
+  // 出題画面では、いつでも名前をタップできる（回答時間中は代理回答＋外す、それ以外は外すだけ）
+  if (stageOn || canProxy) box.querySelectorAll("[data-mpid]").forEach(c => c.onclick = () => openProxy(c.dataset.mpid));
   $("monSum").innerHTML = `🟢 <b>${cnt.ok}</b>　🟡 <b>${cnt.warn}</b>　🔴 <b>${cnt.off}</b>` + (qi >= 0 && !pingNonce ? `　｜　回答 <b>${got}</b> ／ ${need}人` : "");
   $("noAnsView").textContent = answerClosed && noAns.length ? `未回答（または届いていない）：${noAns.join("、")}` : "";
   $("monAllBtn").classList.toggle("hidden", !stageOn || !!pingNonce);
@@ -1028,8 +1053,13 @@ let answerStarted = false, revealed = false, proxyPid = "";
 function proxyAllowed() { return qi >= 0 && answerStarted && !revealed && !pingNonce; }
 function openProxy(pid) {
   const p = playersCache[pid];
-  if (!p || !proxyAllowed()) return;
+  if (!p) return;
   proxyPid = pid;
+  const canP = proxyAllowed();
+  $("proxyPanel").querySelector(".pbtns").classList.toggle("hidden", !canP);
+  const rb = $("proxyRemove");
+  clearTimeout(rb._t); rb.dataset.armed = ""; if (rb.dataset.orig) rb.textContent = rb.dataset.orig;
+  if (!canP) { $("proxyTitle").textContent = `${p.name} さん（${teamName(p.team)}）`; $("proxyPanel").classList.remove("hidden"); return; }
   const kind = eligible(p) ? "回答" : "予想";
   $("proxyTitle").textContent = `${p.name} さんの${kind}を代わりに入れる（色カードの色を選ぶ）`;
   $("proxyPanel").classList.remove("hidden");
@@ -1047,6 +1077,13 @@ document.querySelectorAll("[data-proxy]").forEach(b => b.onclick = async () => {
   renderMonitor();
 });
 $("proxyCancel").onclick = () => $("proxyPanel").classList.add("hidden");
+// 11/23 見直し⑤：二重登録などで残った人を、出題中でも外せる（2回押し）。外すとチームの人数・ボーナスの判定から消える。今までのチームの点数はそのまま
+$("proxyRemove").onclick = () => twoStep($("proxyRemove"), "⚠️ もう一度押すと外します", async () => {
+  const pid = proxyPid;
+  $("proxyPanel").classList.add("hidden");
+  if (!pid || !playersCache[pid]) return;
+  await roomRef().child("players/" + pid).remove().catch(() => alert("外せませんでした。ネット接続を確認してください"));
+});
 
 setInterval(() => {
   if (!pin) return;
@@ -1318,6 +1355,7 @@ async function beginAnswer() {
   curSecs = (curAuto || practice) ? AUTO_SECS : +$("secSel").value;
   curQStart = now();
   curEndsAt = curQStart + curSecs * 1000;
+  ansGen++; // 回答スタートごとに番号を進める（前の締切の待ち時間が、出し直した問題に効かないように）
   // 画面のカウントダウンはPC内部の時計で数える（時刻合わせのずれの影響を受けない）
   const hostLocalEnd = performance.now() + curSecs * 1000;
   renderChoices(q);
@@ -1353,9 +1391,16 @@ async function beginAnswer() {
       stopSound("think");
       beep(440, 0.35);
       // 遅れて届く回答のために少し待ってから数え終え、未回答の人を表示する
-      setTimeout(() => { liveOff.forEach(f => f()); liveOff = []; answerClosed = true; renderMonitor(); }, GRACE_MS);
-      $("revealBtn").classList.remove("hidden");
-      setNext("revealBtn", "正解発表！");
+      // 締切まぎわに押された回答が回線の遅れで届くのを待ってから「正解発表！」を出す（11/23 見直し①：すぐ押すと猶予が効かなかった）
+      const closeQi = qi, myGen = ansGen;
+      setNext(null, "締め切り！ 回答を集めています…");
+      setTimeout(() => {
+        // 中断・出し直し・別の問題になっていたら何もしない（11/23 試験1e・1h）
+        if (myGen !== ansGen || abortSaved || qi !== closeQi || revealed || !answerStarted) return;
+        liveOff.forEach(f => f()); liveOff = []; answerClosed = true; renderMonitor();
+        $("revealBtn").classList.remove("hidden");
+        setNext("revealBtn", "正解発表！");
+      }, GRACE_MS);
     }
   }, 100);
 }
@@ -1586,6 +1631,7 @@ $("abortBtn").onclick = () => {
   twoStep($("abortBtn"), "⚠️ もう一度押すと中断（5秒以内）", abortQuiz);
 };
 async function abortQuiz() {
+  ansGen++; // 締切の待ち時間中に中断したとき、中断画面のうしろで「正解発表！」を出さない
   // 出題の途中（まだ正解発表していない）なら、続けるときにこの問題を最初から出し直す
   const midQ = (qi >= 0 || practice) && !revealed && $("prepArea").classList.contains("hidden");
   let prevMeta = null;
@@ -1638,7 +1684,12 @@ function periodWinner() {
   arr.sort((a, b) => (b.pScore || 0) - (a.pScore || 0) || (a.pTime || 0) - (b.pTime || 0));
   return arr[0] || null;
 }
+let periodBusy = false;
 $("periodBtn").onclick = async () => {
+  if (periodBusy) return; // 2回押しでピリオドが2つ進まないように（11/23 見直し③）
+  periodBusy = true;
+  $("periodBtn").disabled = true;
+  try {
   const w = periodWinner();
   periodWinners.push({ period, name: w ? w.name : "—", score: w ? w.pScore : 0, time: w ? w.pTime : 0 });
   const updates = {};
@@ -1665,6 +1716,7 @@ $("periodBtn").onclick = async () => {
   launchConfetti();
   playSound("fanfare");
   saveHost();
+  } finally { periodBusy = false; $("periodBtn").disabled = false; }
 };
 
 // ===== 結果発表 =====
@@ -1678,7 +1730,12 @@ function audKingList(arr) {
 }
 let audTie = false;
 const AUD_RULE = "脱落中の予想投票がいちばん当たった人（同じなら、当たった予想を出すまでの時間の合計が短い人）";
+let finishBusy = false;
 async function finishGame() {
+  if (finishBusy) return; // 2回押しで2回動かないように（11/23 見直し②）
+  finishBusy = true;
+  $("finishBtn").classList.add("hidden");
+  try {
   clearInterval(timerInt);
   showTicker("");
   if (periodDirty) {
@@ -1714,7 +1771,8 @@ async function finishGame() {
   const SPEED_RULE = "いちばん早く正解した回数がいちばん多い人（同じなら、その正解までの時間の合計が短い人）";
   const kingPlayer = speedKing ? playersCache[speedKing[0]] : null;
   // スマホには「発表中」とだけ出す（優勝は最後の発表まで伏せる）
-  await roomRef().child("meta").set({ state: "awards", qi, period });
+  // サーバーの返事を待たずに画面を切り替える（回線が遅いと「結果発表へ」が反応しないように見えたため／11/23 見直し②）
+  roomRef().child("meta").set({ state: "awards", qi, period }).catch(err => console.warn("結果発表の状態を保存できませんでした", err));
   finalMeta = { state: "finished", qi, period,
     masterTeam: master ? master.tid : "", bestTeam: bestTeam ? bestTeam.tid : "", survPid: champ ? champ.pid : "",
     audKingPid: audKing ? audKing.id : "", audKingPids: audKings.map(p => p.id) };
@@ -1768,6 +1826,7 @@ async function finishGame() {
   $("podiumCard").classList.remove("hidden");
   stopAllSounds();
   setNext("awardNextBtn", "賞を順番に発表（ボタンを押すたびに1つずつ）");
+  } finally { finishBusy = false; }
 }
 let awardSteps = [], awardIdx = 0, finalMeta = null, awardBusy = false;
 $("awardNextBtn").onclick = async () => {

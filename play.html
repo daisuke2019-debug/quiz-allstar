@@ -427,6 +427,7 @@ function watch() {
         $("stampBar").classList.add("hidden");
         $("joinCard").classList.remove("hidden");
         $("joinStep2").classList.add("hidden");
+        $("joinBtn").disabled = false; // 外されたあと、そのまま入り直せるように（11/23 試験）
         err("部屋が終了したか、参加が取り消されました。もう一度参加するときは番号を入れてね");
       }
       return;
