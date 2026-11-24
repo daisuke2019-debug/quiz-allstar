@@ -497,11 +497,11 @@ function watch() {
     if (meta.state === "reading" || meta.state === "question") {
       const q = await getQ();
       if (!q || stale()) return;
-      role = (myAlive && (mode !== "rep" || myRep)) ? "ans" : "pred";
+      role = ((myAlive || meta.extra) && (mode !== "rep" || myRep)) ? "ans" : "pred"; // おまけ問題（表彰のあと）は全員が答えられる
       $("qTextP").textContent = q.text;
       $("roleBadge").className = "badge" + (role === "pred" ? " predB" : "");
       const livesLeft = Math.max(0, (meta.lives || 1) - myMiss);
-      $("roleBadge").textContent = meta.practice ? "🔰 練習問題（点数なし）" : role === "pred" ? "予想で参加" : "✋ 回答者" + (meta.auto ? "　ライフ " + "❤️".repeat(livesLeft) : "");
+      $("roleBadge").textContent = meta.extra ? "🎁 おまけ問題（点数なし）" : meta.practice ? "🔰 練習問題（点数なし）" : role === "pred" ? "予想で参加" : "✋ 回答者" + (meta.auto ? "　ライフ " + "❤️".repeat(livesLeft) : "");
       setRoleView(role === "pred");
       $("dblBadge").classList.toggle("hidden", !meta.dbl);
       if (meta.state === "reading") {
@@ -561,7 +561,7 @@ function watch() {
         const my = role === "pred" ? predicted : picked;
         msg = my === correct ? "🎉 正解！" : (my === -1 ? "時間切れ…" : "残念、不正解");
         win = my === correct;
-        sub = `正解は ${LABELS[correct]}。練習なので点数には入りません。本番もこの調子で！`;
+        sub = meta.extra ? `正解は ${LABELS[correct]}。おまけ問題なので点数には入りません。` : `正解は ${LABELS[correct]}。練習なので点数には入りません。本番もこの調子で！`;
       } else if (role === "pred") {
         if (predicted === correct) { msg = "🔮 予想的中！"; sub = "観客ポイント +1"; win = true; }
         else if (predicted === -1) { msg = "正解発表"; sub = `正解は ${LABELS[correct]}。次は予想してみよう`; }
