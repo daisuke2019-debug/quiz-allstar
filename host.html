@@ -609,6 +609,18 @@ $("exportBtn").onclick = () => {
   a.click();
   URL.revokeObjectURL(a.href);
 };
+// 練習問題を1問の形にそろえる（配列なら最初の1問。まちがいがあれば null）
+function normPractice(p) {
+  if (Array.isArray(p)) p = p[0];
+  if (!p || typeof p !== "object") return null;
+  let text = String(p.text || "").trim();
+  const ch = Array.isArray(p.choices) ? p.choices.map(c => String(c ?? "").trim()) : [];
+  let c = p.correct;
+  if (typeof c === "string" && /^[A-Da-d]$/.test(c.trim())) c = "ABCD".indexOf(c.trim().toUpperCase());
+  if (!text || ch.length !== 4 || ch.some(x => !x) || !Number.isInteger(c) || c < 0 || c > 3) return null;
+  if (!text.startsWith("【練習問題・点数なし】")) text = "【練習問題・点数なし】" + text;
+  return { text, choices: ch, correct: c };
+}
 $("importBtn").onclick = () => $("importFile").click();
 $("importFile").onchange = e => {
   const f = e.target.files[0];
@@ -633,6 +645,8 @@ $("importFile").onchange = e => {
       });
       if (!newQs.length) errs.push("問題が1問もありません");
       if (data.teams !== undefined && (!Array.isArray(data.teams) || !data.teams.map(t => String(t).trim()).filter(Boolean).length)) errs.push("チームの欄が正しくありません");
+      const newPractice = data.practice === undefined ? null : normPractice(data.practice);
+      if (data.practice !== undefined && !newPractice) errs.push("練習問題：問題文・選択肢4つ・正解（0〜3 または A〜D）がそろっていません");
       if (errs.length) {
         alert("読み込みを止めました（今のデータはそのままです）\n\n" + errs.slice(0, 15).join("\n") + (errs.length > 15 ? `\n…ほか${errs.length - 15}件` : ""));
         e.target.value = "";
@@ -640,6 +654,7 @@ $("importFile").onchange = e => {
       }
       if (Array.isArray(data.teams)) teams = data.teams.map(t => String(t).trim()).filter(Boolean); // チームの欄が無いときは今のチームのまま
       questions = newQs;
+      if (newPractice) { PRACTICE_Q = newPractice; localStorage.setItem("qs_practice", JSON.stringify(newPractice)); } // 練習問題の欄が無いときは今の練習問題のまま
       if (data.settings) {
         $("secSel").value = data.settings.sec || "10";
         $("consultSel").value = data.settings.consult || "45";
@@ -656,7 +671,8 @@ $("importFile").onchange = e => {
       alert(`読み込みました（チーム${teams.length}・問題${questions.length}問）` +
         (questions.length !== total ? `\n⚠️ 問題は${total}問のはずです（今は${questions.length}問）` : "") +
         (teams.length !== 8 ? `\n⚠️ チームは8つのはずです（今は${teams.length}つ）` : "") +
-        `\n\n▼ 正解の一覧（元の問題と照らし合わせてください）\n` + lines.join("\n"));
+        `\n\n▼ 正解の一覧（元の問題と照らし合わせてください）\n` + lines.join("\n") +
+        `\n練習問題（${newPractice ? "ファイルから" : "前のまま"}）：${L[PRACTICE_Q.correct]}　${PRACTICE_Q.text.replace(/^【練習問題・点数なし】/, "").slice(0, 20)}`);
     } catch (err) {
       alert("読み込めませんでした。書き出したファイルを選んでください");
     }
@@ -1274,7 +1290,10 @@ function renderChoices(q) {
 // ===== 練習問題（2026-11-22 CEO決定）：本番の第1問の前に1問だけ。点数・ライフ・観客ポイント・最速の記録には入れない =====
 // 練習のあいだは qi を 900番台の仮の番号にして、本番の回答と混ざらないようにする。終わったら元に戻す
 // 11/22 CEO決定の練習問題（解説は司会が読む：「水の化学式はH2Oです。」）
-const PRACTICE_Q = { text: "【練習問題・点数なし】水の化学式はどれでしょう？", choices: ["H2O", "CO2", "O2", "NaCl"], correct: 0 };
+// 11/24 CEO：練習問題も問題ファイル（"practice"）から読めるようにする（人の名前を公開の場所に書かないため）。ファイルに無ければこの水の問題
+const PRACTICE_DEFAULT = { text: "【練習問題・点数なし】水の化学式はどれでしょう？", choices: ["H2O", "CO2", "O2", "NaCl"], correct: 0 };
+let PRACTICE_Q = PRACTICE_DEFAULT;
+try { const p = normPractice(JSON.parse(localStorage.getItem("qs_practice") || "null")); if (p) PRACTICE_Q = p; } catch (e) {}
 let practice = false, practiceN = 0, practiceSavedQi = -1;
 const curQ = () => practice ? PRACTICE_Q : questions[qi];
 async function endPractice() {
